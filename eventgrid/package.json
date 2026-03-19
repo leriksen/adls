@@ -1,0 +1,14 @@
+{
+  "name": "adls-eventgrid-demo",
+  "version": "1.0.0",
+  "description": "Event Grid producer/consumer demo for ADLS Gen2",
+  "scripts": {
+    "produce": "node producer.js",
+    "consume": "node consumer.js"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.0.0",
+    "@azure/storage-blob": "^12.0.0",
+    "@azure/storage-queue": "^12.0.0"
+  }
+}
