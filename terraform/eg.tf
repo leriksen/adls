@@ -4,7 +4,7 @@ resource "azurerm_eventgrid_system_topic" "sa" {
   name                   = "leifadls-events"
   resource_group_name    = azurerm_resource_group.arg.name
   location               = azurerm_resource_group.arg.location
-  source_resource_id = azurerm_storage_account.sa.id
+  source_resource_id     = azurerm_storage_account.sa.id
   topic_type             = "Microsoft.Storage.StorageAccounts"
   tags                   = module.environment.tags
 }

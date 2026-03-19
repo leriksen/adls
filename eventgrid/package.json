@@ -7,8 +7,10 @@
     "consume": "node consumer.js"
   },
   "dependencies": {
+    "@azure/arm-resources": "^5.0.0",
     "@azure/identity": "^4.0.0",
     "@azure/storage-blob": "^12.0.0",
+    "@azure/storage-file-datalake": "^12.0.0",
     "@azure/storage-queue": "^12.0.0"
   }
 }
