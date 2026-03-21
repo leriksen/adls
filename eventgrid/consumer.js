@@ -1,27 +1,22 @@
 /**
- * consumer.js — polls testqueue for BlobCreated events from Event Grid,
- * waits a few seconds, then deletes the blob.
- *
- * Intentionally slower than the producer so the queue builds up over time.
- * Ctrl+C to stop.
+ * consumer.js — polls all storage queues for BlobCreated events,
+ * pauses ~2s, then deletes the blob. Runs at ~12/min average.
  *
  * Auth: source terraform/env-dev.sh first (sets ARM_* env vars).
- *
- * Event Grid → Storage Queue delivery notes:
- *   - The queue message body is a JSON array of Event Grid events.
- *   - Each event has eventType, subject, eventTime, id, data { url, api, ... }.
- *   - visibilityTimeout hides the message from other consumers while we process it;
- *     if we crash it reappears automatically.
+ * Ctrl+C to stop.
  */
 
 const { QueueServiceClient } = require("@azure/storage-queue");
 const { BlobServiceClient }  = require("@azure/storage-blob");
 const { ClientSecretCredential } = require("@azure/identity");
 
-const ACCOUNT_NAME     = "leifadls";
-const QUEUE_NAME       = "testqueue";
-const POLL_INTERVAL_MS = 5_000; // poll every 5s — slower than the 3s producer
-const DELETE_DELAY_MS  = 3_000; // pause before deleting so you can watch in portal
+// One entry per storage account — must match terraform/variables.tf defaults
+const QUEUES = [
+  { account: "leifadlsraw",      queue: "raw-events"     },
+  { account: "leifadlscurated",  queue: "curated-events" },
+  { account: "leifadlsarchive",  queue: "archive-events" },
+  { account: "leifadlssandbox",  queue: "sandbox-events" },
+];
 
 const credential = new ClientSecretCredential(
   process.env.ARM_TENANT_ID,
@@ -29,166 +24,119 @@ const credential = new ClientSecretCredential(
   process.env.ARM_CLIENT_SECRET
 );
 
-const queueServiceClient = new QueueServiceClient(
-  `https://${ACCOUNT_NAME}.queue.core.windows.net`,
-  credential
-);
-const blobServiceClient = new BlobServiceClient(
-  `https://${ACCOUNT_NAME}.blob.core.windows.net`,
-  credential
-);
-const queueClient = queueServiceClient.getQueueClient(QUEUE_NAME);
+// Cache clients per account
+const queueClients = {};
+const blobClients  = {};
 
-// Running totals
-const stats = { polls: 0, messagesReceived: 0, eventsHandled: 0, blobsDeleted: 0, errors: 0 };
-
-function ts() {
-  return new Date().toISOString();
-}
-
-function log(msg) {
-  console.log(`[${ts()}] [CONSUMER] ${msg}`);
-}
-
-function parseBlobUrl(blobUrl) {
-  const url   = new URL(blobUrl);
-  const parts = url.pathname.split("/").filter(Boolean);
-  return { container: parts[0], blobPath: parts.slice(1).join("/") };
-}
-
-async function handleEvent(event, eventIndex) {
-  log(`  event[${eventIndex}] type     : ${event.eventType}`);
-  log(`  event[${eventIndex}] id       : ${event.id}`);
-  log(`  event[${eventIndex}] time     : ${event.eventTime}`);
-  log(`  event[${eventIndex}] subject  : ${event.subject}`);
-
-  if (event.eventType !== "Microsoft.Storage.BlobCreated") {
-    log(`  event[${eventIndex}] -- skipping, not a BlobCreated event`);
-    return;
+function queueClient(account, queueName) {
+  const key = `${account}:${queueName}`;
+  if (!queueClients[key]) {
+    queueClients[key] = new QueueServiceClient(
+      `https://${account}.queue.core.windows.net`,
+      credential
+    ).getQueueClient(queueName);
   }
-
-  const { container, blobPath } = parseBlobUrl(event.data.url);
-
-  log(`  event[${eventIndex}] api      : ${event.data.api}`);
-  log(`  event[${eventIndex}] url      : ${event.data.url}`);
-  log(`  event[${eventIndex}] size     : ${event.data.contentLength ?? "unknown"} bytes`);
-  log(`  event[${eventIndex}] parsed   : container="${container}"  blob="${blobPath}"`);
-  log(`  event[${eventIndex}] waiting ${DELETE_DELAY_MS / 1000}s before deleting (blob is live in Azure right now)...`);
-
-  await new Promise((r) => setTimeout(r, DELETE_DELAY_MS));
-
-  log(`  event[${eventIndex}] sending delete request for "${blobPath}"...`);
-  const t0 = Date.now();
-  await blobServiceClient
-    .getContainerClient(container)
-    .getBlobClient(blobPath)
-    .delete();
-  log(`  event[${eventIndex}] DELETED in ${Date.now() - t0}ms — blob is gone`);
-
-  stats.eventsHandled++;
-  stats.blobsDeleted++;
+  return queueClients[key];
 }
 
-async function processMessage(message, msgIndex) {
-  log(`  msg[${msgIndex}] id             : ${message.messageId}`);
-  log(`  msg[${msgIndex}] insertedOn     : ${message.insertedOn}`);
-  log(`  msg[${msgIndex}] expiresOn      : ${message.expiresOn}`);
-  log(`  msg[${msgIndex}] dequeueCount   : ${message.dequeueCount}`);
-  log(`  msg[${msgIndex}] decoding body...`);
+function blobClient(account) {
+  if (!blobClients[account]) {
+    blobClients[account] = new BlobServiceClient(
+      `https://${account}.blob.core.windows.net`,
+      credential
+    );
+  }
+  return blobClients[account];
+}
 
+// Parse account, container, and blob path from a blob URL
+function parseBlobUrl(url) {
+  const u       = new URL(url);
+  const account = u.hostname.split(".")[0];
+  const parts   = u.pathname.split("/").filter(Boolean);
+  return { account, container: parts[0], blobPath: parts.slice(1).join("/") };
+}
+
+// ~12/min average: 5 000ms average cycle, minus ~2 000ms delete delay → 3 000ms sleep
+// ±33% jitter → 2 000–4 000ms sleep
+function nextInterval() {
+  return 2_000 + Math.random() * 2_000;
+}
+
+// ~2s pause between receiving queue entry and deleting the blob
+function deleteDelay() {
+  return 1_500 + Math.random() * 1_000;
+}
+
+// Pick a random queue entry to check each cycle
+function pickQueue() {
+  return QUEUES[Math.floor(Math.random() * QUEUES.length)];
+}
+
+async function processMessage(entry, message) {
   let events;
   try {
     const decoded = Buffer.from(message.messageText, "base64").toString("utf8");
-    log(`  msg[${msgIndex}] decoded  : ${decoded.slice(0, 120)}...`);
     events = JSON.parse(decoded);
-  } catch (err) {
-    log(`  msg[${msgIndex}] ERROR: could not parse as JSON — ${err.message}`);
-    log(`  msg[${msgIndex}] raw text: ${message.messageText}`);
-    stats.errors++;
-    // Still ack it so it doesn't block the queue forever
-    await queueClient.deleteMessage(message.messageId, message.popReceipt);
+  } catch {
+    // unparseable — ack and move on
+    await queueClient(entry.account, entry.queue)
+      .deleteMessage(message.messageId, message.popReceipt);
     return;
   }
 
   const eventArray = Array.isArray(events) ? events : [events];
-  log(`  msg[${msgIndex}] contains ${eventArray.length} event(s)`);
 
-  for (let i = 0; i < eventArray.length; i++) {
+  for (const event of eventArray) {
+    if (event.eventType !== "Microsoft.Storage.BlobCreated") continue;
+
+    const { account, container, blobPath } = parseBlobUrl(event.data.url);
+
+    console.log(`[CONSUME] ${account}/${container}/${blobPath}`);
+
+    await new Promise((r) => setTimeout(r, deleteDelay()));
+
     try {
-      await handleEvent(eventArray[i], i);
+      await blobClient(account)
+        .getContainerClient(container)
+        .getBlobClient(blobPath)
+        .delete();
     } catch (err) {
-      log(`  msg[${msgIndex}] event[${i}] ERROR: ${err.message}`);
-      stats.errors++;
-    }
-  }
-
-  log(`  msg[${msgIndex}] acknowledging (deleting from queue)...`);
-  await queueClient.deleteMessage(message.messageId, message.popReceipt);
-  log(`  msg[${msgIndex}] acknowledged — message removed from queue`);
-  stats.messagesReceived++;
-}
-
-function printStats() {
-  log(
-    `stats — polls:${stats.polls}  msgs:${stats.messagesReceived}  ` +
-    `events:${stats.eventsHandled}  deleted:${stats.blobsDeleted}  errors:${stats.errors}`
-  );
-}
-
-async function poll() {
-  log("=== CONSUMER STARTING ===");
-  log(`account : ${ACCOUNT_NAME}`);
-  log(`queue   : ${QUEUE_NAME}`);
-  log(`poll    : every ${POLL_INTERVAL_MS}ms`);
-  log(`delay   : ${DELETE_DELAY_MS}ms before each delete`);
-  log("authenticating with service principal...");
-
-  await credential.getToken("https://storage.azure.com/.default");
-  log("token acquired — starting poll loop");
-  console.log();
-
-  // noinspection InfiniteLoopJS
-  while (true) {
-    stats.polls++;
-    log(`=== POLL #${stats.polls} ===`);
-    log(`checking queue "${QUEUE_NAME}"...`);
-
-    let response;
-    try {
-      response = await queueClient.receiveMessages({
-        numberOfMessages: 5,
-        visibilityTimeout: 60, // hide from other consumers for 60s while we process
-      });
-    } catch (err) {
-      log(`ERROR receiving messages: ${err.message}`);
-      stats.errors++;
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-      continue;
-    }
-
-    const count = response.receivedMessageItems.length;
-    if (count === 0) {
-      log(`queue is empty — nothing to process`);
-    } else {
-      log(`received ${count} message(s) — processing...`);
-      console.log();
-
-      for (let i = 0; i < count; i++) {
-        log(`--- processing message ${i + 1} of ${count} ---`);
-        await processMessage(response.receivedMessageItems[i], i);
-        console.log();
+      if (err.statusCode !== 404) {
+        console.error(`[CONSUME] ERROR deleting ${blobPath}: ${err.message}`);
       }
     }
+  }
 
-    printStats();
-    log(`sleeping ${POLL_INTERVAL_MS / 1000}s until next poll`);
-    console.log();
+  await queueClient(entry.account, entry.queue)
+    .deleteMessage(message.messageId, message.popReceipt);
+}
 
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+async function main() {
+  await credential.getToken("https://storage.azure.com/.default");
+
+  while (true) {
+    const entry = pickQueue();
+    const client = queueClient(entry.account, entry.queue);
+
+    try {
+      const response = await client.receiveMessages({
+        numberOfMessages: 1,
+        visibilityTimeout: 60,
+      });
+
+      if (response.receivedMessageItems.length > 0) {
+        await processMessage(entry, response.receivedMessageItems[0]);
+      }
+    } catch (err) {
+      console.error(`[CONSUME] ERROR on ${entry.queue}: ${err.message}`);
+    }
+
+    await new Promise((r) => setTimeout(r, nextInterval()));
   }
 }
 
-poll().catch((err) => {
+main().catch((err) => {
   console.error(`[CONSUMER] fatal: ${err.message}`);
   process.exit(1);
 });

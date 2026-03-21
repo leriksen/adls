@@ -1,19 +1,54 @@
 /**
- * producer.js — continuously uploads files to staging/raw/eg-demo/ in ADLS Gen2.
- *
- * Runs slightly faster than the consumer so the queue gradually fills up,
- * illustrating back-pressure. Ctrl+C to stop.
+ * producer.js — uploads files at ~15/min (with jitter) spread randomly
+ * across all storage accounts, containers, and paths.
  *
  * Auth: source terraform/env-dev.sh first (sets ARM_* env vars).
+ * Ctrl+C to stop.
  */
 
 const { BlobServiceClient } = require("@azure/storage-blob");
 const { ClientSecretCredential } = require("@azure/identity");
 
-const ACCOUNT_NAME = "leifadls";
-const CONTAINER    = "staging";
-const BLOB_PREFIX  = "raw/eg-demo";
-const PRODUCE_INTERVAL_MS = 3_000; // upload every 3s
+// Mirrors terraform/variables.tf storage defaults
+const STORAGE = [
+  {
+    account: "leifadlsraw",
+    containers: [
+      { name: "landing",   paths: ["incoming", "processed", "failed", "quarantine"] },
+      { name: "reference", paths: ["static", "lookup", "config"] },
+      { name: "staging",   paths: ["temp", "validate"] },
+    ],
+  },
+  {
+    account: "leifadlscurated",
+    containers: [
+      { name: "silver", paths: ["financial", "operational", "customer"] },
+      { name: "gold",   paths: ["reporting", "analytics", "metrics", "kpi"] },
+    ],
+  },
+  {
+    account: "leifadlsarchive",
+    containers: [
+      { name: "cold",       paths: ["2023", "2024", "2025"] },
+      { name: "compliance", paths: ["audit", "legal", "regulatory"] },
+      { name: "backup",     paths: ["daily", "weekly", "monthly", "yearly", "restore"] },
+    ],
+  },
+  {
+    account: "leifadlssandbox",
+    containers: [
+      { name: "explore", paths: ["experiments", "prototypes", "scratch", "datasets"] },
+      { name: "share",   paths: ["inbound", "outbound"] },
+    ],
+  },
+];
+
+// Flatten to all (account, container, path) triples
+const TARGETS = STORAGE.flatMap((sa) =>
+  sa.containers.flatMap((c) =>
+    c.paths.map((p) => ({ account: sa.account, container: c.name, path: p }))
+  )
+);
 
 const credential = new ClientSecretCredential(
   process.env.ARM_TENANT_ID,
@@ -21,64 +56,53 @@ const credential = new ClientSecretCredential(
   process.env.ARM_CLIENT_SECRET
 );
 
-const blobServiceClient = new BlobServiceClient(
-  `https://${ACCOUNT_NAME}.blob.core.windows.net`,
-  credential
-);
-
-function ts() {
-  return new Date().toISOString();
+// Cache one BlobServiceClient per account
+const blobClients = {};
+function blobClient(account) {
+  if (!blobClients[account]) {
+    blobClients[account] = new BlobServiceClient(
+      `https://${account}.blob.core.windows.net`,
+      credential
+    );
+  }
+  return blobClients[account];
 }
 
-function log(msg) {
-  console.log(`[${ts()}] [PRODUCER] ${msg}`);
+// ~15/min average → 4 000ms average interval, ±40% jitter → 2 400–5 600ms
+function nextInterval() {
+  return 2_400 + Math.random() * 3_200;
+}
+
+function pick() {
+  return TARGETS[Math.floor(Math.random() * TARGETS.length)];
 }
 
 async function uploadOne(seq) {
-  const blobName = `${BLOB_PREFIX}/event-${Date.now()}.txt`;
-  const content  = `seq=${seq}\nproduced=${ts()}\naccount=${ACCOUNT_NAME}\ncontainer=${CONTAINER}\n`;
-  const bytes    = Buffer.byteLength(content);
+  const { account, container, path } = pick();
+  const blobName = `${path}/event-${Date.now()}-${seq}.txt`;
+  const content  = `seq=${seq}\nts=${new Date().toISOString()}\n`;
 
-  log(`--- upload #${seq} ---`);
-  log(`target  : ${ACCOUNT_NAME} / ${CONTAINER} / ${blobName}`);
-  log(`content : ${bytes} bytes`);
-  log(`sending upload request...`);
-
-  const t0 = Date.now();
-  await blobServiceClient
-    .getContainerClient(CONTAINER)
+  await blobClient(account)
+    .getContainerClient(container)
     .getBlockBlobClient(blobName)
-    .upload(content, bytes, { blobHTTPHeaders: { blobContentType: "text/plain" } });
-  const elapsed = Date.now() - t0;
+    .upload(content, Buffer.byteLength(content), {
+      blobHTTPHeaders: { blobContentType: "text/plain" },
+    });
 
-  log(`upload complete in ${elapsed}ms`);
-  log(`Event Grid will fire BlobCreated — expect it in testqueue within ~10s`);
-  log(`next upload in ${PRODUCE_INTERVAL_MS / 1000}s  (consumer is slower — watch the queue grow)`);
-  console.log();
+  console.log(`[PRODUCE] ${account}/${container}/${blobName}`);
 }
 
 async function main() {
-  log("=== PRODUCER STARTING ===");
-  log(`account  : ${ACCOUNT_NAME}`);
-  log(`container: ${CONTAINER}`);
-  log(`prefix   : ${BLOB_PREFIX}`);
-  log(`interval : ${PRODUCE_INTERVAL_MS}ms`);
-  log("authenticating with service principal...");
-
-  // Trigger a token fetch early so the first upload doesn't pay the auth latency.
   await credential.getToken("https://storage.azure.com/.default");
-  log("token acquired — starting loop");
-  console.log();
 
   let seq = 1;
-  // noinspection InfiniteLoopJS
   while (true) {
     try {
       await uploadOne(seq++);
     } catch (err) {
-      log(`ERROR on upload #${seq - 1}: ${err.message}`);
+      console.error(`[PRODUCE] ERROR: ${err.message}`);
     }
-    await new Promise((r) => setTimeout(r, PRODUCE_INTERVAL_MS));
+    await new Promise((r) => setTimeout(r, nextInterval()));
   }
 }
 
