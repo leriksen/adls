@@ -29,36 +29,20 @@ resource "azurerm_storage_account" "sa" {
 }
 
 # ---------------------------------------------------------------------------
-# ADLS Gen2 containers (filesystems)
+# ADLS Gen2 containers (filesystems) and paths via legacy module
 # ---------------------------------------------------------------------------
-resource "azurerm_storage_data_lake_gen2_filesystem" "fs" {
-  for_each = local.containers_flat
+module "adls_container_and_paths" {
+  source  = "localterraform.com/customers/adls_container/azurerm"
+  version = "10.0.0"
 
-  name               = each.value.container.name
-  storage_account_id = azurerm_storage_account.sa[each.value.sa_name].id
+  for_each = local.adls_module_map
 
-  depends_on = [azurerm_role_assignment.me_blob_owner]
-}
-
-# ---------------------------------------------------------------------------
-# Paths within each container
-# ---------------------------------------------------------------------------
-resource "azurerm_storage_data_lake_gen2_path" "path" {
-  for_each = local.paths_flat
-
-  path               = each.value.path
-  filesystem_name    = each.value.container_name
-  storage_account_id = azurerm_storage_account.sa[each.value.sa_name].id
-  resource           = "directory"
-
-  ace {
-    type        = "user"
-    id          = local.me
-    permissions = "rwx"
-  }
+  storage_account_id   = azurerm_storage_account.sa[each.value.sa_name].id
+  data_lake_containers = each.value.containers
+  data_lake_paths      = each.value.paths
 
   depends_on = [
-    azurerm_storage_data_lake_gen2_filesystem.fs,
+    azurerm_role_assignment.me_blob_owner,
     time_sleep.rbac_wait,
   ]
 }
