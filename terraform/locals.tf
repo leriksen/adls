@@ -160,15 +160,12 @@ locals {
   }
 
   # ---------------------------------------------------------------------------
-  # adls_module_map: per-SA map for the (currently commented-out) container/path module
-  #
-  # Restructures var.storage into the shape expected by the adls_container_and_paths
-  # module — grouping containers and paths under their parent SA key.
+  # adls_module_map: per-SA map keyed by sequence_no
   #
   # Output:
   #   {
-  #     "1" => { sa_key = "1", containers = [...], paths = [...] }
-  #     ...
+  #     "01" => { sequence_no = "01", containers = [...], paths = [...] }
+  #     "02" => { sequence_no = "02", containers = [...], paths = [...] }
   #   }
   #
   # Used by:
@@ -176,9 +173,9 @@ locals {
   # ---------------------------------------------------------------------------
   adls_module_map = {
     for sa in var.storage : sa.sequence_no => {
-      sa_key     = sa.sequence_no
-      containers = sa.containers
-      paths      = sa.paths
+      sequence_no = sa.sequence_no
+      containers  = sa.containers
+      paths       = sa.paths
     }
   }
 }
