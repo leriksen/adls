@@ -31,30 +31,54 @@ resource "azurerm_storage_account" "sa" {
 # ---------------------------------------------------------------------------
 # ADLS Gen2 containers (filesystems) and paths via legacy module
 # ---------------------------------------------------------------------------
-module "adls_container_and_paths" {
-  source  = "localterraform.com/customers/adls_container/azurerm"
-  version = "10.0.0"
-
-  for_each = local.adls_module_map
-
-  storage_account_id   = azurerm_storage_account.sa[each.value.sa_name].id
-  data_lake_containers = each.value.containers
-  data_lake_paths      = each.value.paths
-
-  depends_on = [
-    azurerm_role_assignment.me_blob_owner,
-    time_sleep.rbac_wait,
-  ]
-}
+# module "adls_container_and_paths" {
+#   source  = "localterraform.com/customers/adls_container/azurerm"
+#   version = "10.0.0"
+#
+#   for_each = local.adls_module_map
+#
+#   storage_account_id   = azurerm_storage_account.sa[each.value.sa_name].id
+#   data_lake_containers = each.value.containers
+#   data_lake_paths      = each.value.paths
+#
+#   depends_on = [
+#     azurerm_role_assignment.me_blob_owner,
+#     time_sleep.rbac_wait,
+#   ]
+# }
 
 # ---------------------------------------------------------------------------
 # Storage queues
 # ---------------------------------------------------------------------------
 resource "azurerm_storage_queue" "queue" {
-  for_each = local.storage_map
+  for_each = local.queue_map
 
-  name               = each.value.queue
-  storage_account_id = azurerm_storage_account.sa[each.key].id
+  name               = each.value.queue_name
+  storage_account_id = azurerm_storage_account.sa[each.value.sa_name].id
+}
+
+# ---------------------------------------------------------------------------
+# RBAC: event grid system topic identity → Storage Queue Data Message Sender
+#       (for queues of type "queue" only)
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "eg_queue_sender" {
+  for_each = { for k, v in local.queue_map : k => v if v.queue_type == "queue" }
+
+  principal_id         = azurerm_eventgrid_system_topic.topic[each.value.sa_name].identity[0].principal_id
+  role_definition_name = "Storage Queue Data Message Sender"
+  scope                = "${azurerm_storage_account.sa[each.value.sa_name].id}/queueServices/default/queues/${each.value.queue_name}"
+}
+
+# ---------------------------------------------------------------------------
+# RBAC: current user → Storage Queue Data Reader
+#       (for queues of type "dlq" only)
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "me_dlq_reader" {
+  for_each = { for k, v in local.queue_map : k => v if v.queue_type == "dlq" }
+
+  principal_id         = local.me
+  role_definition_name = "Storage Queue Data Reader"
+  scope                = "${azurerm_storage_account.sa[each.value.sa_name].id}/queueServices/default/queues/${each.value.queue_name}"
 }
 
 # ---------------------------------------------------------------------------

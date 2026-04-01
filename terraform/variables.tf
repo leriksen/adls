@@ -4,10 +4,13 @@ variable "environment" {
 }
 
 variable "storage" {
-  description = "ADLS Gen2 storage accounts to provision, each with a queue, containers, and paths."
+  description = "ADLS Gen2 storage accounts to provision, each with queues, containers, and paths."
   type = list(object({
-    name  = string
-    queue = string
+    name = string
+    queues = optional(list(object({
+      name = string
+      type = string # "queue" or "dlq"
+    })), [])
     containers = list(object({
       container_name = string
       acl = optional(list(object({
@@ -31,8 +34,11 @@ variable "storage" {
   }))
   default = [
     {
-      name  = "leifadlsraw"
-      queue = "raw-events"
+      name = "leifadlsraw"
+      queues = [
+        { name = "raw-events", type = "queue" },
+        { name = "raw-dlq",    type = "dlq" },
+      ]
       containers = [
         { container_name = "landing",   acl = [] },
         { container_name = "reference", acl = [] },
@@ -53,8 +59,11 @@ variable "storage" {
       ]
     },
     {
-      name  = "leifadlscurated"
-      queue = "curated-events"
+      name = "leifadlscurated"
+      queues = [
+        { name = "curated-events", type = "queue" },
+        { name = "curated-dlq",    type = "dlq" },
+      ]
       containers = [
         { container_name = "silver", acl = [] },
         { container_name = "gold",   acl = [] },
@@ -69,48 +78,7 @@ variable "storage" {
         { container_name = "gold", path_name = "metrics",   resource_type = "directory", acl = [] },
         { container_name = "gold", path_name = "kpi",       resource_type = "directory", acl = [] },
       ]
-    },
-    {
-      name  = "leifadlsarchive"
-      queue = "archive-events"
-      containers = [
-        { container_name = "cold",       acl = [] },
-        { container_name = "compliance", acl = [] },
-        { container_name = "backup",     acl = [] },
-      ]
-      paths = [
-        { container_name = "cold", path_name = "2023", resource_type = "directory", acl = [] },
-        { container_name = "cold", path_name = "2024", resource_type = "directory", acl = [] },
-        { container_name = "cold", path_name = "2025", resource_type = "directory", acl = [] },
-
-        { container_name = "compliance", path_name = "audit",      resource_type = "directory", acl = [] },
-        { container_name = "compliance", path_name = "legal",      resource_type = "directory", acl = [] },
-        { container_name = "compliance", path_name = "regulatory", resource_type = "directory", acl = [] },
-
-        { container_name = "backup", path_name = "daily",   resource_type = "directory", acl = [] },
-        { container_name = "backup", path_name = "weekly",  resource_type = "directory", acl = [] },
-        { container_name = "backup", path_name = "monthly", resource_type = "directory", acl = [] },
-        { container_name = "backup", path_name = "yearly",  resource_type = "directory", acl = [] },
-        { container_name = "backup", path_name = "restore", resource_type = "directory", acl = [] },
-      ]
-    },
-    {
-      name  = "leifadlssandbox"
-      queue = "sandbox-events"
-      containers = [
-        { container_name = "explore", acl = [] },
-        { container_name = "share",   acl = [] },
-      ]
-      paths = [
-        { container_name = "explore", path_name = "experiments", resource_type = "directory", acl = [] },
-        { container_name = "explore", path_name = "prototypes",  resource_type = "directory", acl = [] },
-        { container_name = "explore", path_name = "scratch",     resource_type = "directory", acl = [] },
-        { container_name = "explore", path_name = "datasets",    resource_type = "directory", acl = [] },
-
-        { container_name = "share", path_name = "inbound",  resource_type = "directory", acl = [] },
-        { container_name = "share", path_name = "outbound", resource_type = "directory", acl = [] },
-      ]
-    },
+    }
   ]
 }
 

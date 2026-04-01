@@ -26,11 +26,15 @@ resource "azurerm_role_assignment" "sp_queue_contributor" {
 resource "azurerm_eventgrid_system_topic" "topic" {
   for_each = local.storage_map
 
-  name                   = "${each.key}-events"
-  resource_group_name    = azurerm_resource_group.arg.name
-  location               = module.global.location
-  source_resource_id = azurerm_storage_account.sa[each.key].id
-  topic_type             = "Microsoft.Storage.StorageAccounts"
+  name                = "${each.key}-events"
+  resource_group_name = azurerm_resource_group.arg.name
+  location            = module.global.location
+  source_resource_id  = azurerm_storage_account.sa[each.key].id
+  topic_type          = "Microsoft.Storage.StorageAccounts"
+
+  identity {
+    type = "SystemAssigned"
+  }
 
   tags = module.environment.tags
 }
@@ -48,7 +52,7 @@ resource "azurerm_eventgrid_event_subscription" "blob_created" {
 
   storage_queue_endpoint {
     storage_account_id                    = azurerm_storage_account.sa[each.key].id
-    queue_name                            = azurerm_storage_queue.queue[each.key].name
+    queue_name                            = local.sa_event_queue[each.key]
     queue_message_time_to_live_in_seconds = 300
   }
 
@@ -56,5 +60,6 @@ resource "azurerm_eventgrid_event_subscription" "blob_created" {
     azurerm_eventgrid_system_topic.topic,
     azurerm_role_assignment.sp_blob_contributor,
     azurerm_role_assignment.sp_queue_contributor,
+    azurerm_role_assignment.eg_queue_sender,
   ]
 }
