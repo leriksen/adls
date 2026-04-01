@@ -4,7 +4,7 @@
 resource "azurerm_storage_account" "sa" {
   for_each = local.storage_map
 
-  name                            = each.key
+  name                            = "${azurerm_resource_group.arg.name}dl${each.key}"
   resource_group_name             = azurerm_resource_group.arg.name
   location                        = module.global.location
   account_kind                    = "StorageV2"
@@ -29,23 +29,29 @@ resource "azurerm_storage_account" "sa" {
 }
 
 # ---------------------------------------------------------------------------
-# ADLS Gen2 containers (filesystems) and paths via legacy module
+# ADLS Gen2 containers (filesystems)
 # ---------------------------------------------------------------------------
-# module "adls_container_and_paths" {
-#   source  = "localterraform.com/customers/adls_container/azurerm"
-#   version = "10.0.0"
-#
-#   for_each = local.adls_module_map
-#
-#   storage_account_id   = azurerm_storage_account.sa[each.value.sa_name].id
-#   data_lake_containers = each.value.containers
-#   data_lake_paths      = each.value.paths
-#
-#   depends_on = [
-#     azurerm_role_assignment.me_blob_owner,
-#     time_sleep.rbac_wait,
-#   ]
-# }
+resource "azurerm_storage_data_lake_gen2_filesystem" "container" {
+  for_each = local.container_map
+
+  name               = each.value.container_name
+  storage_account_id = azurerm_storage_account.sa[each.value.sa_key].id
+
+  dynamic "ace" {
+    for_each = each.value.acl
+    content {
+      scope       = ace.value.scope
+      id          = ace.value.id
+      permissions = ace.value.permissions
+      type        = ace.value.type
+    }
+  }
+
+  depends_on = [
+    azurerm_role_assignment.me_blob_owner,
+    time_sleep.rbac_wait,
+  ]
+}
 
 # ---------------------------------------------------------------------------
 # Storage queues
@@ -54,7 +60,7 @@ resource "azurerm_storage_queue" "queue" {
   for_each = local.queue_map
 
   name               = each.value.queue_name
-  storage_account_id = azurerm_storage_account.sa[each.value.sa_name].id
+  storage_account_id = azurerm_storage_account.sa[each.value.sa_key].id
 }
 
 # ---------------------------------------------------------------------------
@@ -64,9 +70,21 @@ resource "azurerm_storage_queue" "queue" {
 resource "azurerm_role_assignment" "eg_queue_sender" {
   for_each = { for k, v in local.queue_map : k => v if v.queue_type == "queue" }
 
-  principal_id         = azurerm_eventgrid_system_topic.topic[each.value.sa_name].identity[0].principal_id
+  principal_id         = azurerm_eventgrid_system_topic.topic[each.value.sa_key].identity[0].principal_id
   role_definition_name = "Storage Queue Data Message Sender"
-  scope                = "${azurerm_storage_account.sa[each.value.sa_name].id}/queueServices/default/queues/${each.value.queue_name}"
+  scope                = "${azurerm_storage_account.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
+}
+
+# ---------------------------------------------------------------------------
+# RBAC: Event Grid system topic managed identity → Storage Blob Data Contributor
+#       scoped to the "deadletter" container, for SAs that have one
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "eg_deadletter_blob_contributor" {
+  for_each = local.eg_deadletter_map
+
+  principal_id         = azurerm_eventgrid_system_topic.topic[each.key].identity[0].principal_id
+  role_definition_name = "Storage Blob Data Contributor"
+  scope                = "${azurerm_storage_account.sa[each.key].id}/blobServices/default/containers/deadletter"
 }
 
 # ---------------------------------------------------------------------------
@@ -78,7 +96,41 @@ resource "azurerm_role_assignment" "me_dlq_reader" {
 
   principal_id         = local.me
   role_definition_name = "Storage Queue Data Reader"
-  scope                = "${azurerm_storage_account.sa[each.value.sa_name].id}/queueServices/default/queues/${each.value.queue_name}"
+  scope                = "${azurerm_storage_account.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
+}
+
+# ---------------------------------------------------------------------------
+# RBAC: Snowflake SP → Storage Blob Data Contributor (per account where set)
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "snowflake_blob_contributor" {
+  for_each = local.snowflake_sp_map
+
+  principal_id         = each.value
+  role_definition_name = "Storage Blob Data Contributor"
+  scope                = azurerm_storage_account.sa[each.key].id
+}
+
+# ---------------------------------------------------------------------------
+# RBAC: SA integration SP → Storage Blob Data Contributor (per account where set)
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "sa_integration_blob_contributor" {
+  for_each = local.sa_integration_sp_map
+
+  principal_id         = each.value
+  role_definition_name = "Storage Blob Data Contributor"
+  scope                = azurerm_storage_account.sa[each.key].id
+}
+
+# ---------------------------------------------------------------------------
+# RBAC: notification integration SP → Storage Queue Data Contributor
+#       on "queue"-typed queues only (not DLQs), per account where set
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "notification_sp_queue_contributor" {
+  for_each = local.notification_sp_queue_map
+
+  principal_id         = each.value.sp_id
+  role_definition_name = "Storage Queue Data Contributor"
+  scope                = "${azurerm_storage_account.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
 }
 
 # ---------------------------------------------------------------------------

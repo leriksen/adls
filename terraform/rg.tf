@@ -1,17 +1,17 @@
 resource "azurerm_resource_group" "arg" {
   location = module.global.location
-  name     = "sa-arg"
+  name     = "arg"
   tags     = module.environment.tags
 }
 
 resource "azurerm_resource_group" "prg" {
   location = module.global.location
-  name     = "sa-prg"
+  name     = "prg"
   tags     = module.environment.tags
 }
 
 resource "azurerm_resource_group" "nrg" {
   location = module.global.location
-  name     = "sa-nrg"
+  name     = "nrg"
   tags     = module.environment.tags
 }

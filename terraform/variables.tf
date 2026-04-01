@@ -6,7 +6,10 @@ variable "environment" {
 variable "storage" {
   description = "ADLS Gen2 storage accounts to provision, each with queues, containers, and paths."
   type = list(object({
-    name = string
+    sequence_no = string
+    snowflake_sp = optional(string)
+    sa_integration_sp = optional(string)
+    notification_integration_sp = optional(string)
     queues = optional(list(object({
       name = string
       type = string # "queue" or "dlq"
@@ -24,59 +27,63 @@ variable "storage" {
       container_name = string
       path_name      = string
       resource_type  = optional(string, "directory")
-      acl = list(object({
+      acl = optional(list(object({
         scope       = string
         id          = string
         permissions = string
         type        = string
-      }))
+      })), [])
     }))
   }))
   default = [
     {
-      name = "leifadlsraw"
+      sequence_no = "01"
+      snowflake_sp = "00e67771-2882-40d1-a0c4-899f624ea97d"
+      sa_integration_sp = "00e67771-2882-40d1-a0c4-899f624ea97d"
+      notification_integration_sp = "00e67771-2882-40d1-a0c4-899f624ea97d"
       queues = [
         { name = "raw-events", type = "queue" },
         { name = "raw-dlq",    type = "dlq" },
       ]
       containers = [
-        { container_name = "landing",   acl = [] },
-        { container_name = "reference", acl = [] },
-        { container_name = "staging",   acl = [] },
+        { container_name = "landing" },
+        { container_name = "reference" },
+        { container_name = "staging" },
       ]
       paths = [
-        { container_name = "landing", path_name = "incoming",   resource_type = "directory", acl = [] },
-        { container_name = "landing", path_name = "processed",  resource_type = "directory", acl = [] },
-        { container_name = "landing", path_name = "failed",     resource_type = "directory", acl = [] },
-        { container_name = "landing", path_name = "quarantine", resource_type = "directory", acl = [] },
+        { container_name = "landing", path_name = "incoming",   resource_type = "directory" },
+        { container_name = "landing", path_name = "processed",  resource_type = "directory" },
+        { container_name = "landing", path_name = "failed",     resource_type = "directory" },
+        { container_name = "landing", path_name = "quarantine", resource_type = "directory" },
 
-        { container_name = "reference", path_name = "static", resource_type = "directory", acl = [] },
-        { container_name = "reference", path_name = "lookup", resource_type = "directory", acl = [] },
-        { container_name = "reference", path_name = "config", resource_type = "directory", acl = [] },
+        { container_name = "reference", path_name = "static", resource_type = "directory" },
+        { container_name = "reference", path_name = "lookup", resource_type = "directory" },
+        { container_name = "reference", path_name = "config", resource_type = "directory" },
 
-        { container_name = "staging", path_name = "temp",     resource_type = "directory", acl = [] },
-        { container_name = "staging", path_name = "validate", resource_type = "directory", acl = [] },
+        { container_name = "staging", path_name = "temp",     resource_type = "directory" },
+        { container_name = "staging", path_name = "validate", resource_type = "directory" },
       ]
     },
     {
-      name = "leifadlscurated"
+      sequence_no = "02"
       queues = [
         { name = "curated-events", type = "queue" },
         { name = "curated-dlq",    type = "dlq" },
       ]
       containers = [
-        { container_name = "silver", acl = [] },
-        { container_name = "gold",   acl = [] },
+        { container_name = "silver" },
+        { container_name = "gold" },
+        { container_name = "deadletter" },
       ]
       paths = [
-        { container_name = "silver", path_name = "financial",   resource_type = "directory", acl = [] },
-        { container_name = "silver", path_name = "operational", resource_type = "directory", acl = [] },
-        { container_name = "silver", path_name = "customer",    resource_type = "directory", acl = [] },
+        { container_name = "silver", path_name = "financial",   resource_type = "directory" },
+        { container_name = "silver", path_name = "operational", resource_type = "directory" },
+        { container_name = "silver", path_name = "customer",    resource_type = "directory" },
 
-        { container_name = "gold", path_name = "reporting", resource_type = "directory", acl = [] },
-        { container_name = "gold", path_name = "analytics", resource_type = "directory", acl = [] },
-        { container_name = "gold", path_name = "metrics",   resource_type = "directory", acl = [] },
-        { container_name = "gold", path_name = "kpi",       resource_type = "directory", acl = [] },
+        { container_name = "gold", path_name = "reporting", resource_type = "directory" },
+        { container_name = "gold", path_name = "analytics", resource_type = "directory" },
+        { container_name = "gold", path_name = "metrics",   resource_type = "directory" },
+        { container_name = "gold", path_name = "kpi",       resource_type = "directory" },
       ]
     }
   ]
