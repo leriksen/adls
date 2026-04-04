@@ -8,6 +8,7 @@ module "eg_subscription" {
   storage_account_id   = module.sa[each.key].id
   queue_name           = local.sa_event_queue[each.key].name
   system_topic_name    = each.value.system_topic_name
+  retry_policy         = local.sa_event_queue[each.key].retry_policy
   included_event_types = local.sa_event_queue[each.key].included_event_types
   subject_filter       = local.sa_event_queue[each.key].subject_filter
   advanced_filters     = local.sa_event_queue[each.key].advanced_filters

@@ -18,7 +18,8 @@ variable "storage" {
       name                    - Queue name.
       type                    - "queue" (EG delivery target) or "deadletter" (failed-message inspection).
       sa_deadletter_container - (optional) Blob container name to use as the EG dead-letter destination for this queue. Not required for "deadletter"-typed queues.
-      included_event_types - (optional) Event types to subscribe to. Default: ["Microsoft.Storage.BlobCreated"].
+      retry_policy            - (optional) EG retry policy. Defaults to 30 attempts / 1440 min TTL.
+      included_event_types    - (optional) Event types to subscribe to. Default: ["Microsoft.Storage.BlobCreated"].
       subject_filter       - (optional) Filter events by subject string.
         subject_begins_with - (optional) Subject prefix to match.
         subject_ends_with   - (optional) Subject suffix to match.
@@ -63,7 +64,11 @@ variable "storage" {
       name                    = string
       type                    = string # "queue" or "deadletter"
       sa_deadletter_container = optional(string)
-      included_event_types    = optional(list(string), ["Microsoft.Storage.BlobCreated"])
+      retry_policy = optional(object({
+        max_delivery_attempts = optional(number, 30)
+        event_time_to_live    = optional(number, 1440)
+      }), { max_delivery_attempts = 30, event_time_to_live = 1440 })
+      included_event_types = optional(list(string), ["Microsoft.Storage.BlobCreated"])
       subject_filter = optional(object({
         subject_begins_with = optional(string, "")
         subject_ends_with   = optional(string, "")

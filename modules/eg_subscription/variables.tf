@@ -32,6 +32,17 @@ variable "sa_deadletter_container" {
   default = null
 }
 
+variable "retry_policy" {
+  type = object({
+    max_delivery_attempts = optional(number, 30)
+    event_time_to_live    = optional(number, 1440)
+  })
+  default = {
+    max_delivery_attempts = 30
+    event_time_to_live    = 1440
+  }
+}
+
 variable "advanced_filters" {
   type = list(object({
     bool_equals            = optional(list(object({ key = string, value = bool   })), [])

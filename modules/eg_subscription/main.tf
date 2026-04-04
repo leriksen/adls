@@ -18,6 +18,11 @@ resource "azurerm_eventgrid_event_subscription" "this" {
     }
   }
 
+  retry_policy {
+    max_delivery_attempts = var.retry_policy.max_delivery_attempts
+    event_time_to_live    = var.retry_policy.event_time_to_live
+  }
+
   dynamic "subject_filter" {
     for_each = var.subject_filter != null ? [var.subject_filter] : []
     content {
