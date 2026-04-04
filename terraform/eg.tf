@@ -10,7 +10,11 @@ module "eg_subscription" {
   system_topic_name    = each.value.system_topic_name
   included_event_types = local.sa_event_queue[each.key].included_event_types
   subject_filter       = local.sa_event_queue[each.key].subject_filter
-  advanced_filter      = local.sa_event_queue[each.key].advanced_filter
+  advanced_filters     = local.sa_event_queue[each.key].advanced_filters
+  sa_deadletter_container = {
+    sa_id          = module.sa[each.key].id
+    container_name = local.sa_event_queue[each.key].sa_deadletter_container
+  }
 
   depends_on = [
     module.sa,

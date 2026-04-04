@@ -121,30 +121,6 @@ locals {
     ]) : "${pair.sa_key}::${pair.queue_name}" => pair
   }
 
-  # ---------------------------------------------------------------------------
-  # container_map: all containers across all SAs, flattened into a single map
-  #
-  # Output: map keyed by "sa_key::container_name"
-  #   {
-  #     "01::landing"     => { sa_key = "01", container_name = "landing",     acl = [] }
-  #     "02::deadletter"  => { sa_key = "02", container_name = "deadletter",  acl = [] }
-  #     ...
-  #   }
-  #
-  # Used by:
-  #   - azurerm_storage_data_lake_gen2_filesystem.container (for_each — creates all containers)
-  # ---------------------------------------------------------------------------
-  container_map = {
-    for pair in flatten([
-      for sa in var.storage : [
-        for c in sa.containers : {
-          sa_key         = sa.sequence_no
-          container_name = c.container_name
-          acl            = c.acl
-        }
-      ]
-    ]) : "${pair.sa_key}::${pair.container_name}" => pair
-  }
 
   # ---------------------------------------------------------------------------
   # eg_deadletter_queues: SA key → SA object, for SAs that have a "deadletter"-typed queue

@@ -8,8 +8,8 @@ module "sa" {
   resource_group_name = azurerm_resource_group.arg.name
   sequence_no         = each.key
   location            = module.global.location
-  key_vault_id = azurerm_key_vault.kv.id
-  tags         = module.environment.tags
+  key_vault_id        = azurerm_key_vault.kv.id
+  tags                = module.environment.tags
 
   depends_on = [azurerm_role_assignment.kv_crypto_officer]
 }

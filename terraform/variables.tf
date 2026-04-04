@@ -15,14 +15,15 @@ variable "storage" {
     sa_system_topic_principal   - (optional) Object ID of the Event Grid system topic managed identity; required for EG queue sender and deadletter role assignments.
 
     queues (optional) - Storage queues to create.
-      name                 - Queue name.
-      type                 - "queue" (EG delivery target) or "deadletter" (failed-message inspection).
+      name                    - Queue name.
+      type                    - "queue" (EG delivery target) or "deadletter" (failed-message inspection).
+      sa_deadletter_container - Blob container name to use as the EG dead-letter destination for this queue.
       included_event_types - (optional) Event types to subscribe to. Default: ["Microsoft.Storage.BlobCreated"].
       subject_filter       - (optional) Filter events by subject string.
         subject_begins_with - (optional) Subject prefix to match.
         subject_ends_with   - (optional) Subject suffix to match.
         case_sensitive      - (optional) Case-sensitive subject matching. Default: false.
-      advanced_filter      - (optional) Fine-grained property-based filters. Each field is a list of { key, value/values } conditions.
+      advanced_filters     - (optional) List of fine-grained property-based filter sets. Each entry is an object whose fields are lists of { key, value/values } conditions. Default: [].
         bool_equals            - Match a boolean property exactly.
         number_greater_than    - Match a numeric property greater than a value.
         number_less_than       - Match a numeric property less than a value.
@@ -52,23 +53,24 @@ variable "storage" {
       acl            - (optional) List of ACL entries (same structure as containers.acl).
   EOT
   type = list(object({
-    sequence_no = string
-    snowflake_sp = optional(string)
-    sa_integration_sp = optional(string)
+    sequence_no                 = string
+    snowflake_sp                = optional(string)
+    sa_integration_sp           = optional(string)
     notification_integration_sp = optional(string)
-    system_topic_name = optional(string)
-    sa_system_topic_principal = optional(string)
+    system_topic_name           = optional(string)
+    sa_system_topic_principal   = optional(string)
     queues = optional(list(object({
-      name = string
-      type = string # "queue" or "deadletter"
-      included_event_types = optional(list(string), ["Microsoft.Storage.BlobCreated"])
+      name                    = string
+      type                    = string # "queue" or "deadletter"
+      sa_deadletter_container = string
+      included_event_types    = optional(list(string), ["Microsoft.Storage.BlobCreated"])
       subject_filter = optional(object({
         subject_begins_with = optional(string, "")
         subject_ends_with   = optional(string, "")
         case_sensitive      = optional(bool, false)
       }))
-      advanced_filter = optional(object({
-        bool_equals            = optional(list(object({ key = string, value = bool   })), [])
+      advanced_filters = optional(list(object({
+        bool_equals            = optional(list(object({ key = string, value = bool })), [])
         number_greater_than    = optional(list(object({ key = string, value = number })), [])
         number_less_than       = optional(list(object({ key = string, value = number })), [])
         number_in              = optional(list(object({ key = string, values = list(number) })), [])
@@ -81,7 +83,7 @@ variable "storage" {
         string_not_contains    = optional(list(object({ key = string, values = list(string) })), [])
         string_in              = optional(list(object({ key = string, values = list(string) })), [])
         string_not_in          = optional(list(object({ key = string, values = list(string) })), [])
-      }))
+      })), [])
     })), [])
     containers = list(object({
       container_name = string

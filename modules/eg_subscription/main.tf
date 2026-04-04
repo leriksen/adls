@@ -10,6 +10,14 @@ resource "azurerm_eventgrid_event_subscription" "this" {
     queue_message_time_to_live_in_seconds = 300
   }
 
+  dynamic "storage_blob_dead_letter_destination" {
+    for_each = var.sa_deadletter_container != null ? [var.sa_deadletter_container] : []
+    content {
+      storage_account_id          = storage_blob_dead_letter_destination.value.sa_id
+      storage_blob_container_name = storage_blob_dead_letter_destination.value.container_name
+    }
+  }
+
   dynamic "subject_filter" {
     for_each = var.subject_filter != null ? [var.subject_filter] : []
     content {
@@ -20,7 +28,7 @@ resource "azurerm_eventgrid_event_subscription" "this" {
   }
 
   dynamic "advanced_filter" {
-    for_each = var.advanced_filter != null ? [var.advanced_filter] : []
+    for_each = var.advanced_filters
     content {
       dynamic "bool_equals" {
         for_each = advanced_filter.value.bool_equals
