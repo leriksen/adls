@@ -186,4 +186,11 @@ locals {
   #   - module.eg_subscription (for_each — only create EG subscription where topic is named)
   # ---------------------------------------------------------------------------
   sa_with_event_subscription = { for k, v in local.storage_map : k => v if v.system_topic_name != null }
+
+  # ---------------------------------------------------------------------------
+  # pep_approve_map: SAs with a pep_connection where approve == true
+  # pep_deny_map:    SAs with a pep_connection where approve == false
+  # ---------------------------------------------------------------------------
+  pep_approve_map = { for k, v in local.storage_map : k => v if v.pep_connection != null && v.pep_connection.approve == true }
+  pep_deny_map    = { for k, v in local.storage_map : k => v if v.pep_connection != null && v.pep_connection.approve == false }
 }

@@ -77,6 +77,29 @@ resource "azurerm_role_assignment" "notification_sp_queue_contributor" {
 }
 
 # ---------------------------------------------------------------------------
+# Private endpoint connection — approve
+# ---------------------------------------------------------------------------
+module "pep_approve" {
+  source   = "../modules/pep-approve"
+  for_each = local.pep_approve_map
+
+  pep_name    = each.value.pep_connection.pep_name
+  resource_id = each.value.pep_connection.resource_id
+}
+
+# ---------------------------------------------------------------------------
+# Private endpoint connection — deny
+# ---------------------------------------------------------------------------
+module "pep_deny" {
+  source   = "../modules/pep-deny"
+  for_each = local.pep_deny_map
+
+  pep_name       = each.value.pep_connection.pep_name
+  resource_id    = each.value.pep_connection.resource_id
+  rejection_only = each.value.pep_connection.delete_connection != null ? each.value.pep_connection.delete_connection : true
+}
+
+# ---------------------------------------------------------------------------
 # RBAC propagation sleep (wait before creating filesystems and paths)
 # ---------------------------------------------------------------------------
 resource "time_sleep" "rbac_wait" {

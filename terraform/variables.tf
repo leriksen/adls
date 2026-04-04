@@ -13,6 +13,11 @@ variable "storage" {
     notification_integration_sp - (optional) Object ID of the notification integration SP; grants Storage Queue Data Contributor on "queue"-typed queues only.
     system_topic_name           - (optional) Name of the existing Event Grid system topic to subscribe to for BlobCreated events.
     sa_system_topic_principal   - (optional) Object ID of the Event Grid system topic managed identity; required for EG queue sender and deadletter role assignments.
+    pep_connection              - (optional) Private endpoint connection to approve or deny.
+      pep_name          - Name of the private endpoint connection.
+      resource_id       - Resource ID of the resource the PEP is attached to.
+      approve           - true to approve the connection; false to deny it.
+      delete_connection - (optional) If false, passed to pep-deny as rejection_only. Defaults to true.
 
     queues (optional) - Storage queues to create.
       name                    - Queue name.
@@ -60,6 +65,12 @@ variable "storage" {
     notification_integration_sp = optional(string)
     system_topic_name           = optional(string)
     sa_system_topic_principal   = optional(string)
+    pep_connection = optional(object({
+      pep_name          = string
+      resource_id       = string
+      approve           = bool
+      delete_connection = optional(bool)
+    }))
     queues = optional(list(object({
       name                    = string
       type                    = string # "queue" or "deadletter"
