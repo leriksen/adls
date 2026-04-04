@@ -3,9 +3,9 @@
 #       (for queues of type "queue" only)
 # ---------------------------------------------------------------------------
 resource "azurerm_role_assignment" "eg_queue_sender" {
-  for_each = { for k, v in local.queue_map : k => v if v.queue_type == "queue" }
+  for_each = local.event_queues
 
-  principal_id         = module.sa[each.value.sa_key].system_topic_principal_id
+  principal_id         = each.value.sa_system_topic_principal
   role_definition_name = "Storage Queue Data Message Sender"
   scope                = "${module.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
 }
@@ -15,9 +15,9 @@ resource "azurerm_role_assignment" "eg_queue_sender" {
 #       scoped to the "deadletter" container, for SAs that have one
 # ---------------------------------------------------------------------------
 resource "azurerm_role_assignment" "eg_deadletter_blob_contributor" {
-  for_each = local.eg_deadletter_map
+  for_each = local.eg_deadletter_queues
 
-  principal_id         = module.sa[each.key].system_topic_principal_id
+  principal_id         = each.value.sa_system_topic_principal
   role_definition_name = "Storage Blob Data Contributor"
   scope                = "${module.sa[each.key].id}/blobServices/default/containers/deadletter"
 }
@@ -27,7 +27,7 @@ resource "azurerm_role_assignment" "eg_deadletter_blob_contributor" {
 # ---------------------------------------------------------------------------
 module "eg_subscription" {
   source   = "../modules/eg_subscription"
-  for_each = { for k, v in local.storage_map : k => v if v.system_topic_name != null }
+  for_each = local.sa_with_event_subscription
 
   storage_account_id = module.sa[each.key].id
   queue_name         = local.sa_event_queue[each.key]

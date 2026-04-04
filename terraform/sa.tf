@@ -36,22 +36,10 @@ module "adls_filesystem" {
 # ---------------------------------------------------------------------------
 module "sa_queue" {
   source   = "../modules/sa_queue"
-  for_each = { for k, v in local.storage_map : k => v if length(v.queues) > 0 }
+  for_each = local.sa_with_queues
 
   storage_account_id = module.sa[each.key].id
   queues             = each.value.queues
-}
-
-# ---------------------------------------------------------------------------
-# RBAC: current user → Storage Queue Data Reader
-#       (for queues of type "dlq" only)
-# ---------------------------------------------------------------------------
-resource "azurerm_role_assignment" "me_dlq_reader" {
-  for_each = { for k, v in local.queue_map : k => v if v.queue_type == "dlq" }
-
-  principal_id         = local.me
-  role_definition_name = "Storage Queue Data Reader"
-  scope                = "${module.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
 }
 
 # ---------------------------------------------------------------------------
@@ -86,50 +74,6 @@ resource "azurerm_role_assignment" "notification_sp_queue_contributor" {
   principal_id         = each.value.sp_id
   role_definition_name = "Storage Queue Data Contributor"
   scope                = "${module.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
-}
-
-# ---------------------------------------------------------------------------
-# RBAC: current user → Storage Blob Data Owner (required to set path ACLs)
-# ---------------------------------------------------------------------------
-resource "azurerm_role_assignment" "me_blob_owner" {
-  for_each = local.storage_map
-
-  principal_id         = local.me
-  role_definition_name = "Storage Blob Data Owner"
-  scope                = module.sa[each.key].id
-}
-
-# ---------------------------------------------------------------------------
-# RBAC: current user → Storage Queue Data Contributor
-# ---------------------------------------------------------------------------
-resource "azurerm_role_assignment" "me_queue_contributor" {
-  for_each = local.storage_map
-
-  principal_id         = local.me
-  role_definition_name = "Storage Queue Data Contributor"
-  scope                = module.sa[each.key].id
-}
-
-# ---------------------------------------------------------------------------
-# RBAC: service principal → Storage Blob Data Contributor (per account)
-# ---------------------------------------------------------------------------
-resource "azurerm_role_assignment" "sp_blob_contributor" {
-  for_each = local.storage_map
-
-  principal_id         = data.azurerm_client_config.current.object_id
-  role_definition_name = "Storage Blob Data Contributor"
-  scope                = module.sa[each.key].id
-}
-
-# ---------------------------------------------------------------------------
-# RBAC: service principal → Storage Queue Data Contributor (per account)
-# ---------------------------------------------------------------------------
-resource "azurerm_role_assignment" "sp_queue_contributor" {
-  for_each = local.storage_map
-
-  principal_id         = data.azurerm_client_config.current.object_id
-  role_definition_name = "Storage Queue Data Contributor"
-  scope                = module.sa[each.key].id
 }
 
 # ---------------------------------------------------------------------------
