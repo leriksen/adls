@@ -1,51 +1,29 @@
 # ---------------------------------------------------------------------------
 # Storage accounts
 # ---------------------------------------------------------------------------
-resource "azurerm_storage_account" "sa" {
+module "sa" {
+  source   = "../modules/storage_account"
   for_each = local.storage_map
 
-  name                            = "${azurerm_resource_group.arg.name}dl${each.key}"
-  resource_group_name             = azurerm_resource_group.arg.name
-  location                        = module.global.location
-  account_kind                    = "StorageV2"
-  account_tier                    = "Standard"
-  account_replication_type        = "LRS"
-  is_hns_enabled                  = true
-  sftp_enabled                    = false
-  allow_nested_items_to_be_public = false
-  shared_access_key_enabled       = false
+  resource_group_name = azurerm_resource_group.arg.name
+  sequence_no         = each.key
+  location            = module.global.location
+  key_vault_id = azurerm_key_vault.kv.id
+  tags         = module.environment.tags
 
-  identity {
-    type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.umi.id]
-  }
-
-  customer_managed_key {
-    key_vault_key_id          = azurerm_key_vault_key.cmk.id
-    user_assigned_identity_id = azurerm_user_assigned_identity.umi.id
-  }
-
-  tags = module.environment.tags
+  depends_on = [azurerm_role_assignment.kv_crypto_officer]
 }
 
 # ---------------------------------------------------------------------------
-# ADLS Gen2 containers (filesystems)
+# ADLS Gen2 filesystems and paths
 # ---------------------------------------------------------------------------
-resource "azurerm_storage_data_lake_gen2_filesystem" "container" {
-  for_each = local.container_map
+module "adls_filesystem" {
+  source   = "../modules/adls_filesystem"
+  for_each = local.storage_map
 
-  name               = each.value.container_name
-  storage_account_id = azurerm_storage_account.sa[each.value.sa_key].id
-
-  dynamic "ace" {
-    for_each = each.value.acl
-    content {
-      scope       = ace.value.scope
-      id          = ace.value.id
-      permissions = ace.value.permissions
-      type        = ace.value.type
-    }
-  }
+  storage_account_id = module.sa[each.key].id
+  containers         = each.value.containers
+  paths              = each.value.paths
 
   depends_on = [
     azurerm_role_assignment.me_blob_owner,
@@ -56,35 +34,12 @@ resource "azurerm_storage_data_lake_gen2_filesystem" "container" {
 # ---------------------------------------------------------------------------
 # Storage queues
 # ---------------------------------------------------------------------------
-resource "azurerm_storage_queue" "queue" {
-  for_each = local.queue_map
+module "sa_queue" {
+  source   = "../modules/sa_queue"
+  for_each = { for k, v in local.storage_map : k => v if length(v.queues) > 0 }
 
-  name               = each.value.queue_name
-  storage_account_id = azurerm_storage_account.sa[each.value.sa_key].id
-}
-
-# ---------------------------------------------------------------------------
-# RBAC: event grid system topic identity → Storage Queue Data Message Sender
-#       (for queues of type "queue" only)
-# ---------------------------------------------------------------------------
-resource "azurerm_role_assignment" "eg_queue_sender" {
-  for_each = { for k, v in local.queue_map : k => v if v.queue_type == "queue" }
-
-  principal_id         = azurerm_eventgrid_system_topic.topic[each.value.sa_key].identity[0].principal_id
-  role_definition_name = "Storage Queue Data Message Sender"
-  scope                = "${azurerm_storage_account.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
-}
-
-# ---------------------------------------------------------------------------
-# RBAC: Event Grid system topic managed identity → Storage Blob Data Contributor
-#       scoped to the "deadletter" container, for SAs that have one
-# ---------------------------------------------------------------------------
-resource "azurerm_role_assignment" "eg_deadletter_blob_contributor" {
-  for_each = local.eg_deadletter_map
-
-  principal_id         = azurerm_eventgrid_system_topic.topic[each.key].identity[0].principal_id
-  role_definition_name = "Storage Blob Data Contributor"
-  scope                = "${azurerm_storage_account.sa[each.key].id}/blobServices/default/containers/deadletter"
+  storage_account_id = module.sa[each.key].id
+  queues             = each.value.queues
 }
 
 # ---------------------------------------------------------------------------
@@ -96,7 +51,7 @@ resource "azurerm_role_assignment" "me_dlq_reader" {
 
   principal_id         = local.me
   role_definition_name = "Storage Queue Data Reader"
-  scope                = "${azurerm_storage_account.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
+  scope                = "${module.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
 }
 
 # ---------------------------------------------------------------------------
@@ -107,7 +62,7 @@ resource "azurerm_role_assignment" "snowflake_blob_contributor" {
 
   principal_id         = each.value
   role_definition_name = "Storage Blob Data Contributor"
-  scope                = azurerm_storage_account.sa[each.key].id
+  scope                = module.sa[each.key].id
 }
 
 # ---------------------------------------------------------------------------
@@ -118,7 +73,7 @@ resource "azurerm_role_assignment" "sa_integration_blob_contributor" {
 
   principal_id         = each.value
   role_definition_name = "Storage Blob Data Contributor"
-  scope                = azurerm_storage_account.sa[each.key].id
+  scope                = module.sa[each.key].id
 }
 
 # ---------------------------------------------------------------------------
@@ -130,7 +85,7 @@ resource "azurerm_role_assignment" "notification_sp_queue_contributor" {
 
   principal_id         = each.value.sp_id
   role_definition_name = "Storage Queue Data Contributor"
-  scope                = "${azurerm_storage_account.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
+  scope                = "${module.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
 }
 
 # ---------------------------------------------------------------------------
@@ -141,7 +96,7 @@ resource "azurerm_role_assignment" "me_blob_owner" {
 
   principal_id         = local.me
   role_definition_name = "Storage Blob Data Owner"
-  scope                = azurerm_storage_account.sa[each.key].id
+  scope                = module.sa[each.key].id
 }
 
 # ---------------------------------------------------------------------------
@@ -152,7 +107,29 @@ resource "azurerm_role_assignment" "me_queue_contributor" {
 
   principal_id         = local.me
   role_definition_name = "Storage Queue Data Contributor"
-  scope                = azurerm_storage_account.sa[each.key].id
+  scope                = module.sa[each.key].id
+}
+
+# ---------------------------------------------------------------------------
+# RBAC: service principal → Storage Blob Data Contributor (per account)
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "sp_blob_contributor" {
+  for_each = local.storage_map
+
+  principal_id         = data.azurerm_client_config.current.object_id
+  role_definition_name = "Storage Blob Data Contributor"
+  scope                = module.sa[each.key].id
+}
+
+# ---------------------------------------------------------------------------
+# RBAC: service principal → Storage Queue Data Contributor (per account)
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "sp_queue_contributor" {
+  for_each = local.storage_map
+
+  principal_id         = data.azurerm_client_config.current.object_id
+  role_definition_name = "Storage Queue Data Contributor"
+  scope                = module.sa[each.key].id
 }
 
 # ---------------------------------------------------------------------------
