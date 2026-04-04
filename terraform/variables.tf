@@ -17,7 +17,7 @@ variable "storage" {
     queues (optional) - Storage queues to create.
       name                    - Queue name.
       type                    - "queue" (EG delivery target) or "deadletter" (failed-message inspection).
-      sa_deadletter_container - Blob container name to use as the EG dead-letter destination for this queue.
+      sa_deadletter_container - (optional) Blob container name to use as the EG dead-letter destination for this queue. Not required for "deadletter"-typed queues.
       included_event_types - (optional) Event types to subscribe to. Default: ["Microsoft.Storage.BlobCreated"].
       subject_filter       - (optional) Filter events by subject string.
         subject_begins_with - (optional) Subject prefix to match.
@@ -62,7 +62,7 @@ variable "storage" {
     queues = optional(list(object({
       name                    = string
       type                    = string # "queue" or "deadletter"
-      sa_deadletter_container = string
+      sa_deadletter_container = optional(string)
       included_event_types    = optional(list(string), ["Microsoft.Storage.BlobCreated"])
       subject_filter = optional(object({
         subject_begins_with = optional(string, "")
