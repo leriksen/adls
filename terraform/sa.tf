@@ -36,10 +36,10 @@ module "adls_filesystem" {
 # ---------------------------------------------------------------------------
 module "sa_queue" {
   source   = "../modules/sa_queue"
-  for_each = local.sa_with_queues
+  for_each = local.queue_map
 
-  storage_account_id = module.sa[each.key].id
-  queues             = each.value.queues
+  storage_account_id = module.sa[each.value.sa_key].id
+  queue_name         = each.value.queue_name
 }
 
 # ---------------------------------------------------------------------------
