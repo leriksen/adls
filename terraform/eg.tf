@@ -1,4 +1,26 @@
 # ---------------------------------------------------------------------------
+# Event subscriptions: BlobCreated → storage queue, one per storage account
+# ---------------------------------------------------------------------------
+module "eg_subscription" {
+  source   = "../modules/eg_subscription"
+  for_each = local.sa_with_event_subscription
+
+  storage_account_id   = module.sa[each.key].id
+  queue_name           = local.sa_event_queue[each.key].name
+  system_topic_name    = each.value.system_topic_name
+  included_event_types = local.sa_event_queue[each.key].included_event_types
+  subject_filter       = local.sa_event_queue[each.key].subject_filter
+  advanced_filter      = local.sa_event_queue[each.key].advanced_filter
+
+  depends_on = [
+    module.sa,
+    azurerm_role_assignment.sp_blob_contributor,
+    azurerm_role_assignment.sp_queue_contributor,
+    azurerm_role_assignment.eg_queue_sender,
+  ]
+}
+
+# ---------------------------------------------------------------------------
 # RBAC: event grid system topic identity → Storage Queue Data Message Sender
 #       (for queues of type "queue" only)
 # ---------------------------------------------------------------------------
@@ -22,24 +44,3 @@ resource "azurerm_role_assignment" "eg_deadletter_blob_contributor" {
   scope                = "${module.sa[each.key].id}/blobServices/default/containers/deadletter"
 }
 
-# ---------------------------------------------------------------------------
-# Event subscriptions: BlobCreated → storage queue, one per storage account
-# ---------------------------------------------------------------------------
-module "eg_subscription" {
-  source   = "../modules/eg_subscription"
-  for_each = local.sa_with_event_subscription
-
-  storage_account_id   = module.sa[each.key].id
-  queue_name           = local.sa_event_queue[each.key].name
-  system_topic_name    = each.value.system_topic_name
-  included_event_types = local.sa_event_queue[each.key].included_event_types
-  subject_filter       = local.sa_event_queue[each.key].subject_filter
-  advanced_filter      = local.sa_event_queue[each.key].advanced_filter
-
-  depends_on = [
-    module.sa,
-    azurerm_role_assignment.sp_blob_contributor,
-    azurerm_role_assignment.sp_queue_contributor,
-    azurerm_role_assignment.eg_queue_sender,
-  ]
-}
