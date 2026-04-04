@@ -29,9 +29,12 @@ module "eg_subscription" {
   source   = "../modules/eg_subscription"
   for_each = local.sa_with_event_subscription
 
-  storage_account_id = module.sa[each.key].id
-  queue_name         = local.sa_event_queue[each.key]
-  system_topic_name  = each.value.system_topic_name
+  storage_account_id   = module.sa[each.key].id
+  queue_name           = local.sa_event_queue[each.key].name
+  system_topic_name    = each.value.system_topic_name
+  included_event_types = local.sa_event_queue[each.key].included_event_types
+  subject_filter       = local.sa_event_queue[each.key].subject_filter
+  advanced_filter      = local.sa_event_queue[each.key].advanced_filter
 
   depends_on = [
     module.sa,

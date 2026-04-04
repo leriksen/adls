@@ -57,7 +57,7 @@ locals {
   }
 
   # ---------------------------------------------------------------------------
-  # sa_event_queue: SA key → the event subscription target queue name for that SA
+  # sa_event_queue: SA key → the full "queue"-typed queue object for that SA
   #
   # Note: this does NOT control which queues are created — all queues are created
   # via queue_map regardless of type. This local only identifies which queue receives
@@ -65,15 +65,14 @@ locals {
   # Each SA is expected to have exactly one such queue; [0] will error at plan time
   # if an SA has no "queue"-typed queue.
   #
-  # Output: { "01" => "raw-events", "02" => "curated-events" }
+  # Output: { "01" => { name, type, included_event_types, subject_filter, advanced_filter }, ... }
   #
   # Used by:
-  #   - azurerm_eventgrid_event_subscription.blob_created
-  #     (storage_queue_endpoint.queue_name — the destination queue for BlobCreated events)
+  #   - module.eg_subscription (queue_name, included_event_types, subject_filter, advanced_filter)
   # ---------------------------------------------------------------------------
   sa_event_queue = {
     for sa in var.storage :
-    sa.sequence_no => [for q in sa.queues : q.name if q.type == "queue"][0]
+    sa.sequence_no => [for q in sa.queues : q if q.type == "queue"][0]
   }
 
   # ---------------------------------------------------------------------------
@@ -148,7 +147,7 @@ locals {
   }
 
   # ---------------------------------------------------------------------------
-  # eg_deadletter_queues: SA key → SA object, for SAs that have a "deadletter" container
+  # eg_deadletter_queues: SA key → SA object, for SAs that have a "deadletter"-typed queue
   #
   # Used by:
   #   - azurerm_role_assignment.eg_deadletter_blob_contributor
@@ -157,7 +156,7 @@ locals {
   # ---------------------------------------------------------------------------
   eg_deadletter_queues = {
     for sa in var.storage : sa.sequence_no => sa
-    if contains([for c in sa.containers : c.container_name], "deadletter") && sa.sa_system_topic_principal != null
+    if contains([for q in sa.queues : q.type], "deadletter") && sa.sa_system_topic_principal != null
   }
 
   # ---------------------------------------------------------------------------
