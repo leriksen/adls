@@ -22,20 +22,25 @@ const { ResourceManagementClient } = require("@azure/arm-resources");
 const { DataLakeServiceClient } = require("@azure/storage-file-datalake");
 const { ClientSecretCredential } = require("@azure/identity");
 
-const ACCOUNT_NAME    = "leifadls";
-const RESOURCE_GROUP  = "sa-arg";
+const RESOURCE_GROUP  = "arg";
 const SUBSCRIPTION_ID = process.env.ARM_SUBSCRIPTION_ID;
-const FILESYSTEMS     = ["staging", "forge"];
+
+// Mirrors terraform/variables.tf storage defaults
+const ACCOUNTS = [
+  {
+    name:        "argdl01",
+    filesystems: ["landing", "reference", "staging", "deadletter"],
+  },
+  {
+    name:        "argdl02",
+    filesystems: ["silver", "gold", "deadletter"],
+  },
+];
 
 const credential = new ClientSecretCredential(
   process.env.ARM_TENANT_ID,
   process.env.ARM_CLIENT_ID,
   process.env.ARM_CLIENT_SECRET
-);
-
-const serviceClient = new DataLakeServiceClient(
-  `https://${ACCOUNT_NAME}.dfs.core.windows.net`,
-  credential
 );
 
 async function checkResourceGroup() {
@@ -55,15 +60,19 @@ async function checkResourceGroup() {
   }
 }
 
-async function checkStorageAccount() {
-  process.stdout.write(`Checking storage account "${ACCOUNT_NAME}" ... `);
+async function checkStorageAccount(accountName) {
+  const serviceClient = new DataLakeServiceClient(
+    `https://${accountName}.dfs.core.windows.net`,
+    credential
+  );
+  process.stdout.write(`Checking storage account "${accountName}" ... `);
   try {
     // listFileSystems returns an async iterator; just pull the first page to
     // confirm the account exists and the credential has access.
     // eslint-disable-next-line no-unused-vars
     for await (const _ of serviceClient.listFileSystems({ maxPageSize: 1 })) break;
     console.log("reachable");
-    return true;
+    return serviceClient;
   } catch (err) {
     if (err.statusCode === 403) {
       console.log(`SKIP — credential lacks access (403)`);
@@ -72,11 +81,11 @@ async function checkStorageAccount() {
     } else {
       console.log(`SKIP — ${err.message}`);
     }
-    return false;
+    return null;
   }
 }
 
-async function cleanFilesystem(fsName) {
+async function cleanFilesystem(serviceClient, fsName) {
   const fsClient = serviceClient.getFileSystemClient(fsName);
 
   process.stdout.write(`  checking filesystem "${fsName}" ... `);
@@ -88,25 +97,15 @@ async function cleanFilesystem(fsName) {
   console.log("exists");
 
   let deleted = 0;
-  for await (const item of fsClient.listPaths({ recursive: false })) {
-    if (item.isDirectory) {
-      process.stdout.write(`    [dir]  ${item.name} (recursive) ... `);
-      try {
-        await fsClient.getDirectoryClient(item.name).delete(true);
-        console.log("deleted");
-        deleted++;
-      } catch (err) {
-        console.log(`FAILED — ${err.message}`);
-      }
-    } else {
-      process.stdout.write(`    [file] ${item.name} ... `);
-      try {
-        await fsClient.getFileClient(item.name).delete();
-        console.log("deleted");
-        deleted++;
-      } catch (err) {
-        console.log(`FAILED — ${err.message}`);
-      }
+  for await (const item of fsClient.listPaths({ recursive: true })) {
+    if (item.isDirectory) continue;
+    process.stdout.write(`    [file] ${item.name} ... `);
+    try {
+      await fsClient.getFileClient(item.name).delete();
+      console.log("deleted");
+      deleted++;
+    } catch (err) {
+      console.log(`FAILED — ${err.message}`);
     }
   }
 
@@ -117,23 +116,25 @@ async function main() {
   const rgExists = await checkResourceGroup();
   if (!rgExists) return;
 
-  const accountReachable = await checkStorageAccount();
-  if (!accountReachable) {
-    console.log("\nStorage account unreachable — nothing to clean up.");
-    return;
+  let grandTotal = 0;
+  for (const account of ACCOUNTS) {
+    console.log(`\n=== ${account.name} ===`);
+    const serviceClient = await checkStorageAccount(account.name);
+    if (!serviceClient) continue;
+
+    let total = 0;
+    for (const name of account.filesystems) {
+      console.log(`[${name}]`);
+      const count = await cleanFilesystem(serviceClient, name);
+      if (count === 0) console.log("  (nothing deleted)");
+      total += count;
+      console.log();
+    }
+    grandTotal += total;
   }
 
-  console.log();
-  let total = 0;
-  for (const name of FILESYSTEMS) {
-    console.log(`[${name}]`);
-    const count = await cleanFilesystem(name);
-    if (count === 0) console.log("  (nothing deleted)");
-    total += count;
-    console.log();
-  }
-
-  console.log(`Done — deleted ${total} top-level item(s) across ${FILESYSTEMS.length} filesystem(s).`);
+  const fsCount = ACCOUNTS.reduce((sum, a) => sum + a.filesystems.length, 0);
+  console.log(`Done — deleted ${grandTotal} top-level item(s) across ${fsCount} filesystem(s).`);
   console.log("Safe to run terraform destroy.");
 }
 

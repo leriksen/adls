@@ -12,33 +12,15 @@ const { ClientSecretCredential } = require("@azure/identity");
 // Mirrors terraform/variables.tf storage defaults
 const STORAGE = [
   {
-    account: "leifadlsraw",
+    account: "argdl01",
     containers: [
-      { name: "landing",   paths: ["incoming", "processed", "failed", "quarantine"] },
-      { name: "reference", paths: ["static", "lookup", "config"] },
-      { name: "staging",   paths: ["temp", "validate"] },
+      { name: "landing", paths: ["incoming", "processed", "failed", "quarantine"] },
     ],
   },
   {
-    account: "leifadlscurated",
+    account: "argdl02",
     containers: [
       { name: "silver", paths: ["financial", "operational", "customer"] },
-      { name: "gold",   paths: ["reporting", "analytics", "metrics", "kpi"] },
-    ],
-  },
-  {
-    account: "leifadlsarchive",
-    containers: [
-      { name: "cold",       paths: ["2023", "2024", "2025"] },
-      { name: "compliance", paths: ["audit", "legal", "regulatory"] },
-      { name: "backup",     paths: ["daily", "weekly", "monthly", "yearly", "restore"] },
-    ],
-  },
-  {
-    account: "leifadlssandbox",
-    containers: [
-      { name: "explore", paths: ["experiments", "prototypes", "scratch", "datasets"] },
-      { name: "share",   paths: ["inbound", "outbound"] },
     ],
   },
 ];
@@ -79,7 +61,7 @@ function pick() {
 
 async function uploadOne(seq) {
   const { account, container, path } = pick();
-  const blobName = `${path}/event-${Date.now()}-${seq}.txt`;
+  const blobName = `${path}/event-${Date.now()}-${seq}.parquet`;
   const content  = `seq=${seq}\nts=${new Date().toISOString()}\n`;
 
   await blobClient(account)

@@ -12,10 +12,8 @@ const { ClientSecretCredential } = require("@azure/identity");
 
 // One entry per storage account — must match terraform/variables.tf defaults
 const QUEUES = [
-  { account: "leifadlsraw",      queue: "raw-events"     },
-  { account: "leifadlscurated",  queue: "curated-events" },
-  { account: "leifadlsarchive",  queue: "archive-events" },
-  { account: "leifadlssandbox",  queue: "sandbox-events" },
+  { account: "argdl01", queue: "raw-events"     },
+  { account: "argdl02", queue: "curated-events" },
 ];
 
 const credential = new ClientSecretCredential(
