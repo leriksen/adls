@@ -1,7 +1,6 @@
 locals {
   # Object ID of the current user (Leif).
-  # Used in RBAC role assignments (me_blob_owner, me_queue_contributor, me_dlq_reader)
-  # so that the deploying user has direct data-plane access to all storage accounts.
+  # Used in RBAC role assignments in my_access.tf.
   me = "00e67771-2882-40d1-a0c4-899f624ea97d"
 
   # ---------------------------------------------------------------------------
@@ -40,17 +39,16 @@ locals {
   #
   # Used by:
   #   - azurerm_storage_queue.queue             (for_each — creates ALL queues)
-  #   - azurerm_role_assignment.eg_queue_sender (filtered to type == "queue"      — EG sender role)
-  #   - azurerm_role_assignment.me_dlq_reader   (filtered to type == "deadletter" — reader role)
+  #   - azurerm_role_assignment.eg_queue_sender  (filtered to type == "queue"      — EG sender role)
+  #   - azurerm_role_assignment.me_dlq_reader    (filtered to type == "deadletter" — reader role)
   # ---------------------------------------------------------------------------
   queue_map = {
     for pair in flatten([
       for sa in var.storage : [
         for q in sa.queues : {
-          sa_key                    = sa.sequence_no
-          queue_name                = q.name
-          queue_type                = q.type
-          sa_system_topic_principal = sa.sa_system_topic_principal
+          sa_key     = sa.sequence_no
+          queue_name = q.name
+          queue_type = q.type
         }
       ]
     ]) : "${pair.sa_key}::${pair.queue_name}" => pair
@@ -132,7 +130,7 @@ locals {
   # ---------------------------------------------------------------------------
   eg_deadletter_queues = {
     for sa in var.storage : sa.sequence_no => sa
-    if contains([for q in sa.queues : q.type], "deadletter") && sa.sa_system_topic_principal != null
+    if contains([for q in sa.queues : q.type], "deadletter") && sa.system_topic_name != null
   }
 
   # ---------------------------------------------------------------------------
@@ -169,7 +167,7 @@ locals {
   # Used by:
   #   - azurerm_role_assignment.eg_queue_sender (EG identity → Queue Data Message Sender)
   # ---------------------------------------------------------------------------
-  event_queues = { for k, v in local.queue_map : k => v if v.queue_type == "queue" && v.sa_system_topic_principal != null }
+  event_queues = { for k, v in local.queue_map : k => v if v.queue_type == "queue" && local.storage_map[v.sa_key].system_topic_name != null }
 
   # ---------------------------------------------------------------------------
   # deadletter_queues: queue_map filtered to queues of type "deadletter"

@@ -7,7 +7,7 @@ module "eg_subscription" {
 
   storage_account_id   = module.sa[each.key].id
   queue_name           = local.sa_event_queue[each.key].name
-  system_topic_name    = each.value.system_topic_name
+  system_topic_name    = module.sa[each.key].system_topic_name
   retry_policy         = local.sa_event_queue[each.key].retry_policy
   included_event_types = local.sa_event_queue[each.key].included_event_types
   subject_filter       = local.sa_event_queue[each.key].subject_filter
@@ -19,8 +19,6 @@ module "eg_subscription" {
 
   depends_on = [
     module.sa,
-    azurerm_role_assignment.sp_blob_contributor,
-    azurerm_role_assignment.sp_queue_contributor,
     azurerm_role_assignment.eg_queue_sender,
   ]
 }
@@ -32,7 +30,7 @@ module "eg_subscription" {
 resource "azurerm_role_assignment" "eg_queue_sender" {
   for_each = local.event_queues
 
-  principal_id         = each.value.sa_system_topic_principal
+  principal_id         = module.sa[each.value.sa_key].system_topic_principal_id
   role_definition_name = "Storage Queue Data Message Sender"
   scope                = "${module.sa[each.value.sa_key].id}/queueServices/default/queues/${each.value.queue_name}"
 }
@@ -44,7 +42,7 @@ resource "azurerm_role_assignment" "eg_queue_sender" {
 resource "azurerm_role_assignment" "eg_deadletter_blob_contributor" {
   for_each = local.eg_deadletter_queues
 
-  principal_id         = each.value.sa_system_topic_principal
+  principal_id         = module.sa[each.key].system_topic_principal_id
   role_definition_name = "Storage Blob Data Contributor"
   scope                = "${module.sa[each.key].id}/blobServices/default/containers/deadletter"
 }

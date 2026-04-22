@@ -26,7 +26,7 @@ module "adls_filesystem" {
   paths              = each.value.paths
 
   depends_on = [
-    azurerm_role_assignment.me_blob_owner,
+    azurerm_role_assignment.snowflake_blob_contributor,
     time_sleep.rbac_wait,
   ]
 }
@@ -103,6 +103,6 @@ module "pep_deny" {
 # RBAC propagation sleep (wait before creating filesystems and paths)
 # ---------------------------------------------------------------------------
 resource "time_sleep" "rbac_wait" {
-  depends_on      = [azurerm_role_assignment.me_blob_owner]
+  depends_on      = [azurerm_role_assignment.snowflake_blob_contributor]
   create_duration = module.global.rbac_propagation_sleep
 }
