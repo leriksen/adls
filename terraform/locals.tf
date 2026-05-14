@@ -11,12 +11,86 @@ locals {
   #
   # Used by:
   #   - azurerm_storage_account.sa          (for_each — one SA per entry)
-  #   - azurerm_eventgrid_system_topic.topic (for_each — one topic per SA)
   #   - azurerm_role_assignment.sp_blob_contributor / sp_queue_contributor
   #   - azurerm_role_assignment.me_blob_owner / me_queue_contributor
   #   - time_sleep.rbac_wait (via me_blob_owner dependency)
   # ---------------------------------------------------------------------------
   storage_map = { for sa in var.storage : sa.sequence_no => sa }
+
+  # ---------------------------------------------------------------------------
+  # sa_resource_id: SA key → lower-cased SA resource ID, constructed from
+  # known values so it is always available at plan time.
+  # ---------------------------------------------------------------------------
+  sa_resource_id = {
+    for k in keys(local.storage_map) :
+    k => lower("/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${azurerm_resource_group.arg.name}/providers/Microsoft.Storage/storageAccounts/${azurerm_resource_group.arg.name}dl${k}")
+  }
+
+  # ---------------------------------------------------------------------------
+  # system_topics_by_source: maps lower(source resource ID) → system topic name
+  #
+  # Discovered dynamically via the azapi_resource_list data source. Empty if no
+  # system topics exist yet (i.e. first run before topics are manually created).
+  # ---------------------------------------------------------------------------
+  system_topics_by_source = {
+    for topic in try(data.azapi_resource_list.system_topics.output.value, []) :
+    lower(topic.properties.source) => topic.name
+  }
+
+  # ---------------------------------------------------------------------------
+  # system_topic_identities: maps lower(source resource ID) → principal_id
+  #
+  # Only populated for topics that already have SystemAssigned identity enabled.
+  # Used to gate subscription and role assignment creation on identity readiness.
+  # ---------------------------------------------------------------------------
+  system_topic_identities = {
+    for topic in try(data.azapi_resource_list.system_topics.output.value, []) :
+    lower(topic.properties.source) => topic.identity.principalId
+    if try(topic.identity.type, "None") == "SystemAssigned" && try(topic.identity.principalId, "") != ""
+  }
+
+  # ---------------------------------------------------------------------------
+  # sa_with_event_subscriptions: storage_map entries for which a matching
+  # Event Grid system topic has been discovered in Azure.
+  #
+  # Used by azapi_update_resource to enable managed identity on the topic.
+  # Produces an empty map when storage_map is empty or no topics exist yet.
+  # ---------------------------------------------------------------------------
+  sa_with_event_subscriptions = {
+    for k, v in local.storage_map :
+    k => v
+    if contains(keys(local.system_topics_by_source), local.sa_resource_id[k])
+  }
+
+  # ---------------------------------------------------------------------------
+  # sa_with_managed_identity: sa_with_event_subscriptions further filtered to
+  # topics whose SystemAssigned managed identity is already active.
+  #
+  # Gates all downstream EG resources — subscriptions and role assignments are
+  # only created once the identity is confirmed enabled. On first run (topic
+  # exists but identity not yet enabled) this is empty; on the next run the
+  # azapi_update_resource will have enabled the identity and this populates.
+  # ---------------------------------------------------------------------------
+  sa_with_managed_identity = {
+    for k, v in local.sa_with_event_subscriptions :
+    k => v
+    if contains(keys(local.system_topic_identities), local.sa_resource_id[k])
+  }
+
+  # ---------------------------------------------------------------------------
+  # system_topic_info: SA key → { id, principal_id } for topics with identity
+  #
+  # Provides the system topic resource ID and managed identity principal_id
+  # without requiring a separate data source lookup per topic.
+  # ---------------------------------------------------------------------------
+  system_topic_info = {
+    for k in keys(local.sa_with_managed_identity) :
+    k => {
+      name                = local.system_topics_by_source[local.sa_resource_id[k]]
+      resource_group_name = azurerm_resource_group.arg.name
+      principal_id        = local.system_topic_identities[local.sa_resource_id[k]]
+    }
+  }
 
   # ---------------------------------------------------------------------------
   # queue_map: all queues across all SAs, flattened into a single map
@@ -130,7 +204,7 @@ locals {
   # ---------------------------------------------------------------------------
   eg_deadletter_queues = {
     for sa in var.storage : sa.sequence_no => sa
-    if contains([for q in sa.queues : q.type], "deadletter") && sa.system_topic_name != null
+    if contains([for q in sa.queues : q.type], "deadletter") && contains(keys(local.sa_with_managed_identity), sa.sequence_no)
   }
 
   # ---------------------------------------------------------------------------
@@ -167,7 +241,7 @@ locals {
   # Used by:
   #   - azurerm_role_assignment.eg_queue_sender (EG identity → Queue Data Message Sender)
   # ---------------------------------------------------------------------------
-  event_queues = { for k, v in local.queue_map : k => v if v.queue_type == "queue" && local.storage_map[v.sa_key].system_topic_name != null }
+  event_queues = { for k, v in local.queue_map : k => v if v.queue_type == "queue" && contains(keys(local.sa_with_managed_identity), v.sa_key) }
 
   # ---------------------------------------------------------------------------
   # deadletter_queues: queue_map filtered to queues of type "deadletter"
@@ -177,13 +251,6 @@ locals {
   # ---------------------------------------------------------------------------
   deadletter_queues = { for k, v in local.queue_map : k => v if v.queue_type == "deadletter" }
 
-  # ---------------------------------------------------------------------------
-  # sa_with_event_subscription: storage_map filtered to SAs with a system_topic_name set
-  #
-  # Used by:
-  #   - module.eg_subscription (for_each — only create EG subscription where topic is named)
-  # ---------------------------------------------------------------------------
-  sa_with_event_subscription = { for k, v in local.storage_map : k => v if v.system_topic_name != null }
 
   # ---------------------------------------------------------------------------
   # pep_approve_map: SAs with a pep_connection where approve == true

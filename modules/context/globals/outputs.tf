@@ -2,10 +2,14 @@ output "rbac_propagation_sleep" {
   value = "10s"
 }
 
+output "project" {
+  value = "adls"
+}
+
 output "tags" {
   value = {
-    project      = "PE"
-    project_code = "PE001"
+    project      = "ADLS"
+    project_code = "ADLS001"
     costcentre   = "00001"
   }
 }

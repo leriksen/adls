@@ -63,7 +63,6 @@ Root references modules via relative paths (`../modules/context/*`).
 |------|-----------|
 | `rg.tf` | 3 resource groups (storage, postgres, networking) |
 | `sa.tf` | StorageV2 with HNS (ADLS Gen2), CMK via inline `customer_managed_key` block, shared access key disabled |
-| `akv.tf` | Key Vault (RBAC-enabled, purge-protected), RSA-2048 CMK with 90-day auto-rotate |
 | `umi.tf` | User-assigned identity + RBAC role assignments (Crypto Officer, Blob/Queue Data Contributor) |
 | `data.tf` | Data sources for subscription and client config |
 | `locals.tf` | `local.me` (current user object ID), filesystem/path mapping |
@@ -72,9 +71,8 @@ Root references modules via relative paths (`../modules/context/*`).
 
 ## Key conventions
 
-- **Hard-coded names:** Storage account `leifadls`, Key Vault `leifadslkv`, UMI `tftest-umi` — search before renaming.
+- **Hard-coded names:** Storage account `leifadls`, UMI `tftest-umi` — search before renaming.
 - **`local.me`:** Hard-coded user object ID used in RBAC assignments and path ACLs. One path ACL still has placeholder `"XXXX"`.
 - **State:** Local backend (`terraform.tfstate`) — avoid committing secrets into state; migrate to remote backend for team use.
-- **Key Vault:** `rbac_authorization_enabled = true` and explicit purge/soft-delete settings — be cautious when modifying.
 - **Provider:** azurerm `~>4.0`, Terraform `~>1.0` (see `.terraform.lock.hcl` for pinned versions).
 - **Environment variable:** `TF_VAR_env` drives environment selection; valid values: `dev`, `sit`, `uat`, `prd`.

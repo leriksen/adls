@@ -1,6 +1,7 @@
-resource "azurerm_eventgrid_event_subscription" "this" {
-  name  = "blob-created-to-queue"
-  scope = var.storage_account_id
+resource "azurerm_eventgrid_system_topic_event_subscription" "this" {
+  name                = "blob-created-to-queue"
+  system_topic        = var.system_topic.name
+  resource_group_name = var.system_topic.resource_group_name
 
   included_event_types = var.included_event_types
 

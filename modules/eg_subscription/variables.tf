@@ -6,8 +6,11 @@ variable "queue_name" {
   type = string
 }
 
-variable "system_topic_name" {
-  type = string
+variable "system_topic" {
+  type = object({
+    name                = string
+    resource_group_name = string
+  })
 }
 
 variable "included_event_types" {

@@ -11,7 +11,6 @@ variable "storage" {
     snowflake_sp                - (optional) Object ID of the Snowflake service principal; grants Storage Blob Data Contributor.
     sa_integration_sp           - (optional) Object ID of the SA integration service principal; grants Storage Blob Data Contributor.
     notification_integration_sp - (optional) Object ID of the notification integration SP; grants Storage Queue Data Contributor on "queue"-typed queues only.
-    system_topic_name           - (optional) Name of the existing Event Grid system topic to subscribe to for BlobCreated events.
     pep_connection              - (optional) Private endpoint connection to approve or deny.
       pep_name          - Name of the private endpoint connection.
       resource_id       - Resource ID of the resource the PEP is attached to.
@@ -62,7 +61,6 @@ variable "storage" {
     snowflake_sp                = optional(string)
     sa_integration_sp           = optional(string)
     notification_integration_sp = optional(string)
-    system_topic_name           = optional(string)
     pep_connection = optional(object({
       pep_name          = string
       resource_id       = string
