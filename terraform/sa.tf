@@ -23,6 +23,7 @@ module "adls_filesystem" {
   paths              = each.value.paths
 
   depends_on = [
+    azurerm_role_assignment.blob_owner,
     azurerm_role_assignment.snowflake_blob_contributor,
     time_sleep.rbac_wait,
   ]
