@@ -74,6 +74,18 @@ resource "azurerm_role_assignment" "notification_sp_queue_contributor" {
 }
 
 # ---------------------------------------------------------------------------
+# RBAC: terraform executor — Storage Blob Data Owner on each SA
+# Grants full blob permissions for POSIX path-level operations
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "blob_owner" {
+  for_each = local.storage_map
+
+  principal_id         = data.azurerm_client_config.current.object_id
+  role_definition_name = "Storage Blob Data Owner"
+  scope                = module.sa[each.key].id
+}
+
+# ---------------------------------------------------------------------------
 # Private endpoint connection — approve
 # ---------------------------------------------------------------------------
 module "pep_approve" {
