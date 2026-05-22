@@ -3,6 +3,12 @@ variable "environment" {
   default = "dev"
 }
 
+variable "portal_test_user_object_id" {
+  description = "Object ID of the Entra test user for portal access validation."
+  type        = string
+  default     = null
+}
+
 variable "storage" {
   description = <<-EOT
     List of ADLS Gen2 storage accounts to provision. Each entry defines one storage account and its associated resources.

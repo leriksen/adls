@@ -87,6 +87,19 @@ resource "azurerm_role_assignment" "blob_owner" {
 }
 
 # ---------------------------------------------------------------------------
+# RBAC: portal test user → Reader on storage account 01 (management plane only)
+# ---------------------------------------------------------------------------
+resource "azurerm_role_assignment" "portal_test_user_sa_reader" {
+  for_each = var.portal_test_user_object_id != null ? {
+    for k, v in local.storage_map : k => v if k == "01"
+  } : {}
+
+  principal_id         = var.portal_test_user_object_id
+  role_definition_name = "Reader"
+  scope                = module.sa[each.key].id
+}
+
+# ---------------------------------------------------------------------------
 # Private endpoint connection — approve
 # ---------------------------------------------------------------------------
 module "pep_approve" {
