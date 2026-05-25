@@ -7,7 +7,7 @@ variable "containers" {
     container_name = string
     acl = optional(list(object({
       scope       = string
-      id          = string
+      id          = optional(string)
       permissions = string
       type        = string
     })), [])
@@ -21,7 +21,7 @@ variable "paths" {
     resource_type  = optional(string, "directory")
     acl = optional(list(object({
       scope       = string
-      id          = string
+      id          = optional(string)
       permissions = string
       type        = string
     })), [])
