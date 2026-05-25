@@ -3,8 +3,14 @@ variable "environment" {
   default = "dev"
 }
 
-variable "portal_test_user_object_id" {
-  description = "Object ID of the Entra test user for portal access validation."
+variable "adls_writer_object_id" {
+  description = "Object ID of the ADLS writer service principal."
+  type        = string
+  default     = null
+}
+
+variable "adls_reader_object_id" {
+  description = "Object ID of the ADLS reader service principal."
   type        = string
   default     = null
 }
