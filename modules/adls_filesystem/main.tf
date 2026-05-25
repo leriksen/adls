@@ -33,5 +33,25 @@ resource "azurerm_storage_data_lake_gen2_path" "this" {
     }
   }
 
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      az login --service-principal \
+        -u "$ARM_CLIENT_ID" \
+        -p "$ARM_CLIENT_SECRET" \
+        --tenant "$ARM_TENANT_ID" \
+        --output none
+      account=$(echo "${self.storage_account_id}" | cut -d'/' -f9)
+      az storage fs directory delete \
+        --account-name "$account" \
+        --file-system "${self.filesystem_name}" \
+        --name "${self.path}" \
+        --recursive \
+        --auth-mode login \
+        --yes || true
+    EOT
+    interpreter = ["bash", "-c"]
+  }
+
   depends_on = [azurerm_storage_data_lake_gen2_filesystem.this]
 }
