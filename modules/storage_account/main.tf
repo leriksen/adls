@@ -3,6 +3,14 @@ resource "azurerm_user_assigned_identity" "this" {
   location            = var.location
   resource_group_name = var.resource_group_name
   tags                = var.tags
+
+  # Destroy order: azurerm_storage_account.this references this identity via
+  # identity_ids, creating an implicit Terraform dependency that guarantees the
+  # storage account is destroyed BEFORE this identity. This is intentional — if
+  # CMK encryption is enabled, the identity must remain valid until the storage
+  # account (and its Key Vault access) is fully removed. Do not remove the
+  # identity_ids reference from the storage account without preserving an
+  # explicit depends_on, or this ordering guarantee is lost.
 }
 
 resource "azurerm_storage_account" "this" {
