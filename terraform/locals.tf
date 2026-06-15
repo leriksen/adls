@@ -258,4 +258,29 @@ locals {
   # ---------------------------------------------------------------------------
   pep_approve_map = { for k, v in local.storage_map : k => v if v.pep_connection != null && v.pep_connection.approve == true }
   pep_deny_map    = { for k, v in local.storage_map : k => v if v.pep_connection != null && v.pep_connection.approve == false }
+
+  # ---------------------------------------------------------------------------
+  # sftp_configs: SA key → resolved sftp_users list, for SAs that define them.
+  # Public keys are read from disk at plan time via file().
+  #
+  # Used by:
+  #   - module.sftp_local_users (for_each — one instance per SFTP-enabled SA)
+  # ---------------------------------------------------------------------------
+  sftp_configs = {
+    for s in var.storage : s.sequence_no => [
+      for u in s.sftp_users : {
+        sequence_number = u.sequence_number
+        home_directory  = u.home_directory
+        ssh_key_enabled = u.ssh_key_enabled
+        permission_scopes = u.permission_scopes
+        ssh_authorized_keys = [
+          for k in u.ssh_authorized_keys : {
+            key         = trimspace(file(k.public_key_path))
+            description = k.description
+          }
+        ]
+      }
+    ]
+    if length(s.sftp_users) > 0
+  }
 }
