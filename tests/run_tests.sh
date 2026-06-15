@@ -1,24 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VENV="$REPO_ROOT/tests/.venv"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPORT="$SCRIPT_DIR/report.md"
 
-source "$REPO_ROOT/terraform/env-dev.sh"
-source "$REPO_ROOT/tests/env-test.sh"
+bash "$SCRIPT_DIR/run_posix_tests.sh" &
+POSIX_PID=$!
 
-if [[ ! -d "$VENV" ]]; then
-  python3 -m venv "$VENV"
-fi
+bash "$SCRIPT_DIR/run_sftp_tests.sh" &
+SFTP_PID=$!
 
-source "$VENV/bin/activate"
-pip install -q -r "$REPO_ROOT/tests/requirements.txt"
+POSIX_EXIT=0; wait "$POSIX_PID" || POSIX_EXIT=$?
+SFTP_EXIT=0;  wait "$SFTP_PID"  || SFTP_EXIT=$?
 
-REPORT="$REPO_ROOT/tests/report.md"
+# Merge reports
+{
+  echo "## POSIX ACL tests"
+  echo ""
+  cat "$SCRIPT_DIR/report_posix.md"
+  echo ""
+  echo "## SFTP tests"
+  echo ""
+  cat "$SCRIPT_DIR/report_sftp.md"
+} > "$REPORT"
 
-pytest "$REPO_ROOT/tests/" -v \
-  --md-report \
-  --md-report-output="$REPORT" \
-  --md-report-verbose=1
-
+echo ""
+echo "=== Combined report ==="
 cat "$REPORT"
+
+if [[ $POSIX_EXIT -ne 0 || $SFTP_EXIT -ne 0 ]]; then
+  echo "POSIX tests exit: $POSIX_EXIT  SFTP tests exit: $SFTP_EXIT" >&2
+  exit 1
+fi

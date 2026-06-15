@@ -13,3 +13,8 @@ variable "location" {
 variable "tags" {
   type = map(string)
 }
+
+variable "sftp_enabled" {
+  type    = bool
+  default = false
+}

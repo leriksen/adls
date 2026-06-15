@@ -9,6 +9,7 @@ module "sa" {
   sequence_no         = each.key
   location            = module.global.location
   tags                = module.environment.tags
+  sftp_enabled        = each.value.sftp_enabled
 }
 
 # ---------------------------------------------------------------------------

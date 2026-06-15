@@ -70,6 +70,7 @@ variable "storage" {
   EOT
   type = list(object({
     sequence_no                 = string
+    sftp_enabled                = optional(bool, false)
     snowflake_sp                = optional(string)
     sa_integration_sp           = optional(string)
     notification_integration_sp = optional(string)

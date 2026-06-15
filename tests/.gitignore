@@ -1,0 +1,6 @@
+*.pem
+.venv/
+__pycache__/
+report.md
+report_posix.md
+report_sftp.md

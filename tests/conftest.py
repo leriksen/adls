@@ -1,5 +1,7 @@
+import io
 import os
 import uuid
+import paramiko
 import pytest
 from azure.core.exceptions import HttpResponseError
 from azure.identity import ClientSecretCredential
@@ -8,6 +10,7 @@ from azure.storage.filedatalake import DataLakeServiceClient
 TENANT_ID       = os.environ["AZURE_TENANT_ID"]
 STORAGE_ACCOUNT = os.environ.get("ADLS_STORAGE_ACCOUNT", "adlsargdl01")
 ACCOUNT_URL     = f"https://{STORAGE_ACCOUNT}.dfs.core.windows.net"
+SFTP_HOST       = f"{STORAGE_ACCOUNT}.blob.core.windows.net"
 
 
 def _client(client_id, client_secret):
@@ -72,11 +75,71 @@ def assert_denied(fn):
     )
 
 
+def assert_sftp_denied(fn):
+    with pytest.raises(OSError):
+        fn()
+
+
+def _sftp_connect(username, key_file):
+    key = paramiko.RSAKey.from_private_key_file(key_file)
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(hostname=SFTP_HOST, port=22, username=username, pkey=key)
+    return ssh.open_sftp(), ssh
+
+
+@pytest.fixture(scope="session")
+def sftp_push_client():
+    sftp, ssh = _sftp_connect(
+        f"{STORAGE_ACCOUNT}.sftpuser0",
+        os.environ["SFTP_PUSH_KEY_FILE"],
+    )
+    yield sftp
+    sftp.close()
+    ssh.close()
+
+
+@pytest.fixture(scope="session")
+def sftp_pull_client():
+    sftp, ssh = _sftp_connect(
+        f"{STORAGE_ACCOUNT}.sftpuser1",
+        os.environ["SFTP_PULL_KEY_FILE"],
+    )
+    yield sftp
+    sftp.close()
+    ssh.close()
+
+
+@pytest.fixture(scope="session")
+def sftp_push_artifacts(sftp_push_client, admin_client):
+    """Push user creates scratch dir and seed file via SFTP; admin cleans up via DataLake."""
+    run_id  = uuid.uuid4().hex[:8]
+    scratch = f"test-sftp-{run_id}"
+    seed    = f"{scratch}/seed.txt"
+
+    sftp_push_client.mkdir(scratch)
+    with sftp_push_client.open(seed, "w") as f:
+        f.write(b"hello from sftp push")
+
+    yield {"scratch_dir": scratch, "seed_file": seed}
+
+    try:
+        admin_client.get_file_system_client("landing").get_directory_client(
+            f"dev01/inbound/{scratch}"
+        ).delete_directory()
+    except Exception:
+        pass
+
+
 def pytest_collection_modifyitems(items):
     def sort_key(item):
         if "test_adls_writer" in item.nodeid:
             return 0
         if "test_adls_reader" in item.nodeid:
             return 1
-        return 2
+        if "test_sftp_push" in item.nodeid:
+            return 2
+        if "test_sftp_pull" in item.nodeid:
+            return 3
+        return 4
     items.sort(key=sort_key)

@@ -16,6 +16,11 @@ terraform {
       version = "~>0.9"
     }
 
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~>4.0"
+    }
+
     # azuredevops = {
     #   source = "microsoft/azuredevops"
     #   version = ">= 0.1.0"
