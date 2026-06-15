@@ -1,3 +1,9 @@
+# Test credentials — never commit
+.adls_writer_client_id
+.adls_writer_client_secret
+.adls_reader_client_id
+.adls_reader_client_secret
+
 *.pem
 .venv/
 __pycache__/
