@@ -29,6 +29,18 @@ variable "storage" {
       approve           - true to approve the connection; false to deny it.
       delete_connection - (optional) If false, passed to pep-deny as rejection_only. Defaults to true.
 
+    sftp_users (optional) - SFTP local users to provision on this storage account. ssh_authorized_keys.key is injected at plan time from TLS resources; only the description is configured here.
+      sequence_number     - Zero-based index used by the SFTP module to name the local user.
+      home_directory      - Default home directory (container/path) for the user.
+      ssh_key_enabled     - Whether SSH key auth is enabled. Default: true.
+      permission_scopes   - Permission scopes granted to the user.
+        target_container  - Container the scope applies to.
+        service           - Azure storage service (e.g. "blob").
+        permissions       - Allowed operations (e.g. ["Read", "List"]).
+      ssh_authorized_keys - SSH public keys to authorise.
+        public_key_path - Path to the OpenSSH public key file, relative to the terraform working directory.
+        description     - Label for the key.
+
     queues (optional) - Storage queues to create.
       name                    - Queue name.
       type                    - "queue" (EG delivery target) or "deadletter" (failed-message inspection).
@@ -80,6 +92,20 @@ variable "storage" {
       approve           = bool
       delete_connection = optional(bool)
     }))
+    sftp_users = optional(list(object({
+      sequence_number = number
+      home_directory  = string
+      ssh_key_enabled = optional(bool, true)
+      permission_scopes = list(object({
+        target_container = string
+        service          = string
+        permissions      = list(string)
+      }))
+      ssh_authorized_keys = optional(list(object({
+        public_key_path = string
+        description     = string
+      })), [])
+    })), [])
     queues = optional(list(object({
       name                    = string
       type                    = string # "queue" or "deadletter"

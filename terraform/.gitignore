@@ -1,0 +1,17 @@
+# Credentials and secrets — never commit
+.client_id_dev
+.key_dev
+.subscription_id
+.tenant_id
+.pat
+.sftp_push_key
+.sftp_push_key.pub
+.sftp_pull_key
+.sftp_pull_key.pub
+
+# Terraform local state and working files
+terraform.tfstate
+terraform.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+tfplan

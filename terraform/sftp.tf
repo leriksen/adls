@@ -1,73 +1,28 @@
 # ---------------------------------------------------------------------------
-# SSH key pairs for SFTP local users (ECDSA P-256)
-# ---------------------------------------------------------------------------
-resource "tls_private_key" "sftp_push" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-resource "tls_private_key" "sftp_pull" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-# ---------------------------------------------------------------------------
 # SFTP local users on argdl01
 # ---------------------------------------------------------------------------
-module "sftp_local_users" {
-  source = "../../terraform-azurerm-sftp-local-users"
+locals {
+  storage_01 = one([for s in var.storage : s if s.sequence_no == "01"])
 
-  storage_account_id = module.sa["01"].id
-
-  sftp_users = [
-    {
-      sequence_number = 0
-      home_directory  = "landing/dev01/inbound"
-      ssh_key_enabled = true
-      permission_scopes = [
-        {
-          target_container = "landing"
-          service          = "blob"
-          permissions      = ["Create", "Write", "Read", "List", "Delete"]
-        }
-      ]
+  sftp_users_resolved = [
+    for u in local.storage_01.sftp_users : {
+      sequence_number = u.sequence_number
+      home_directory  = u.home_directory
+      ssh_key_enabled = u.ssh_key_enabled
+      permission_scopes = u.permission_scopes
       ssh_authorized_keys = [
-        {
-          key         = trimspace(tls_private_key.sftp_push.public_key_openssh)
-          description = "sftp-push-user"
-        }
-      ]
-    },
-    {
-      sequence_number = 1
-      home_directory  = "landing/dev01/inbound"
-      ssh_key_enabled = true
-      permission_scopes = [
-        {
-          target_container = "landing"
-          service          = "blob"
-          permissions      = ["Read", "List"]
-        }
-      ]
-      ssh_authorized_keys = [
-        {
-          key         = trimspace(tls_private_key.sftp_pull.public_key_openssh)
-          description = "sftp-pull-user"
+        for k in u.ssh_authorized_keys : {
+          key         = trimspace(file(k.public_key_path))
+          description = k.description
         }
       ]
     }
   ]
 }
 
-# ---------------------------------------------------------------------------
-# Private key outputs — sensitive, retrieve with: terraform output -json
-# ---------------------------------------------------------------------------
-output "sftp_push_private_key" {
-  value     = tls_private_key.sftp_push.private_key_openssh
-  sensitive = true
-}
+module "sftp_local_users" {
+  source = "../../terraform-azurerm-sftp-local-users"
 
-output "sftp_pull_private_key" {
-  value     = tls_private_key.sftp_pull.private_key_openssh
-  sensitive = true
+  storage_account_id = module.sa["01"].id
+  sftp_users         = local.sftp_users_resolved
 }
