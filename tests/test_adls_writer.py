@@ -2,9 +2,10 @@
 adls-test-sp-writer permission tests.
 
 ACLs:
-  landing/              r-x (access + default)
-  landing/dev01/        r-x (access + default)
-  landing/dev01/inbound rwx (access + default)
+  landing/                       r-x (access + default)
+  landing/dev01/                 r-x (access + default)
+  landing/dev01/inbound/         rwx (access + default)
+  landing/dev01/inbound/sterling rwx (access + default, inherited)
 """
 import pytest
 from conftest import assert_denied
@@ -27,7 +28,12 @@ def test_list_inbound(writer_client, writer_artifacts):
     assert isinstance(paths, list)
 
 
-# ── ALLOW: create / read / delete in inbound ────────────────────────────────
+def test_list_sterling(writer_client, writer_artifacts):
+    paths = list(writer_client.get_file_system_client("landing").get_paths(path="dev01/inbound/sterling"))
+    assert isinstance(paths, list)
+
+
+# ── ALLOW: create / read / delete in sterling ────────────────────────────────
 
 def test_read_seed_file(writer_client, writer_artifacts):
     fc = writer_client.get_file_system_client("landing").get_file_client(writer_artifacts["seed_file"])

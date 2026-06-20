@@ -1,8 +1,9 @@
 """
 sftpuser1 (pull) SFTP permission tests.
 
-Home:        landing/dev01/inbound
-Permissions: Read, List on landing container
+Home:        landing/dev01/inbound/sterling
+Permissions: (none) on landing container + ACL authorization enabled
+             Read/list access in sterling via POSIX ACL other:r-x only
 
 Runs after test_sftp_push.py — sftp_push_artifacts must already exist.
 """
@@ -10,7 +11,7 @@ import io
 from conftest import assert_sftp_denied
 
 
-# ── ALLOW: list and read ─────────────────────────────────────────────────────
+# ── ALLOW: list and navigate down ────────────────────────────────────────────
 
 def test_list_home_dir(sftp_pull_client, sftp_push_artifacts):
     entries = sftp_pull_client.listdir(".")
@@ -32,6 +33,15 @@ def test_can_download_seed_file(sftp_pull_client, sftp_push_artifacts):
     buf = io.BytesIO()
     sftp_pull_client.getfo(sftp_push_artifacts["seed_file"], buf)
     assert buf.getvalue() == b"hello from sftp push"
+
+
+# ── DENY: navigate up ────────────────────────────────────────────────────────
+
+def test_cannot_navigate_up(sftp_pull_client):
+    # chdir(..) is permitted by execute-only ACL on parent; listing is denied
+    sftp_pull_client.chdir("..")
+    assert_sftp_denied(lambda: sftp_pull_client.listdir("."))
+    sftp_pull_client.chdir("sterling")
 
 
 # ── DENY: write ──────────────────────────────────────────────────────────────

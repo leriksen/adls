@@ -4,9 +4,10 @@ adls-test-sp-reader permission tests.
 Runs after test_adls_writer.py — writer_artifacts must already exist.
 
 ACLs:
-  landing/              r-x (access + default)
-  landing/dev01/        r-x (access only)
-  landing/dev01/inbound r-x (access + default)
+  landing/                       r-x (access + default)
+  landing/dev01/                 r-x (access only)
+  landing/dev01/inbound/         r-x (access + default)
+  landing/dev01/inbound/sterling r-x (access + default, inherited)
 """
 import pytest
 from conftest import assert_denied
@@ -29,9 +30,14 @@ def test_list_inbound(reader_client, writer_artifacts):
     assert isinstance(paths, list)
 
 
+def test_list_sterling(reader_client, writer_artifacts):
+    paths = list(reader_client.get_file_system_client("landing").get_paths(path="dev01/inbound/sterling"))
+    assert isinstance(paths, list)
+
+
 def test_can_see_scratch_dir(reader_client, writer_artifacts):
     scratch_name = writer_artifacts["scratch_dir"].split("/")[-1]
-    paths = [p.name for p in reader_client.get_file_system_client("landing").get_paths(path="dev01/inbound")]
+    paths = [p.name for p in reader_client.get_file_system_client("landing").get_paths(path="dev01/inbound/sterling")]
     assert any(scratch_name in p for p in paths)
 
 
@@ -47,7 +53,7 @@ def test_can_read_seed_file(reader_client, writer_artifacts):
 
 # ── DENY: any write ──────────────────────────────────────────────────────────
 
-def test_cannot_create_file_in_inbound(reader_client, writer_artifacts):
+def test_cannot_create_file_in_sterling(reader_client, writer_artifacts):
     fs = reader_client.get_file_system_client("landing")
     assert_denied(lambda: fs.get_file_client(
         f"{writer_artifacts['scratch_dir']}/reader-denied.txt"
@@ -59,7 +65,7 @@ def test_cannot_delete_seed_file(reader_client, writer_artifacts):
     assert_denied(fc.delete_file)
 
 
-def test_cannot_create_dir_in_inbound(reader_client, writer_artifacts):
+def test_cannot_create_dir_in_sterling(reader_client, writer_artifacts):
     fs = reader_client.get_file_system_client("landing")
     assert_denied(lambda: fs.get_directory_client(
         f"{writer_artifacts['scratch_dir']}/reader-denied-dir"

@@ -93,9 +93,10 @@ variable "storage" {
       delete_connection = optional(bool)
     }))
     sftp_users = optional(list(object({
-      sequence_number = number
-      home_directory  = string
-      ssh_key_enabled = optional(bool, true)
+      sequence_number         = number
+      home_directory          = string
+      ssh_key_enabled         = optional(bool, true)
+      allow_acl_authorization = optional(bool, false)
       permission_scopes = list(object({
         target_container = string
         service          = string

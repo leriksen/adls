@@ -50,7 +50,7 @@ def admin_client():
 def writer_artifacts(writer_client, admin_client):
     """Writer creates the scratch dir and seed file; admin cleans up regardless of outcome."""
     run_id = uuid.uuid4().hex[:8]
-    scratch = f"dev01/inbound/test-scratch-{run_id}"
+    scratch = f"dev01/inbound/sterling/test-scratch-{run_id}"
     seed    = f"{scratch}/seed.txt"
 
     landing_writer = writer_client.get_file_system_client("landing")
@@ -125,7 +125,7 @@ def sftp_push_artifacts(sftp_push_client, admin_client):
 
     try:
         admin_client.get_file_system_client("landing").get_directory_client(
-            f"dev01/inbound/{scratch}"
+            f"dev01/inbound/sterling/{scratch}"
         ).delete_directory()
     except Exception:
         pass
