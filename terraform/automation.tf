@@ -30,5 +30,8 @@ resource "azurerm_automation_runbook" "sftp_toggle" {
   runbook_type            = "PowerShell"
   tags                    = module.environment.tags
 
-  content = file("${path.module}/runbooks/sftp_toggle.ps1")
+  content = templatefile("${path.module}/runbooks/sftp_toggle.ps1", {
+    resource_group_name  = azurerm_resource_group.arg.name
+    storage_account_name = "${azurerm_resource_group.arg.name}dl${each.key}"
+  })
 }

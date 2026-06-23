@@ -1,9 +1,9 @@
 param(
-    [Parameter(Mandatory = $true)]
-    [string] $ResourceGroupName,
+    [Parameter(Mandatory = $false)]
+    [string] $ResourceGroupName = "${resource_group_name}",
 
-    [Parameter(Mandatory = $true)]
-    [string] $StorageAccountName,
+    [Parameter(Mandatory = $false)]
+    [string] $StorageAccountName = "${storage_account_name}",
 
     [Parameter(Mandatory = $true)]
     [bool] $SftpEnabled
