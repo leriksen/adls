@@ -282,6 +282,6 @@ locals {
         ]
       }
     ]
-    if length(s.sftp_users) > 0
+    if try(s.sftp_enabled, false) && length(try(s.sftp_users, [])) > 0
   }
 }
